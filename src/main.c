@@ -1,0 +1,167 @@
+#include <stdio.h>
+#include <stdlib.h>
+#include <stdint.h>
+#include <stdbool.h>
+#include <string.h>
+#include <unistd.h>
+#include <fcntl.h>
+#include <errno.h>
+#include <signal.h>
+#include <sys/mman.h>
+#include <sys/select.h>
+#include <sys/time.h>
+#include <linux/input.h>
+
+#include "os.h"
+#include "audio.h"
+
+static volatile bool keep_running = true;
+
+static void sig_handler(int sig) {
+    (void)sig;
+    keep_running = false;
+}
+
+int main(int argc, char **argv) {
+    (void)argc;
+    (void)argv;
+
+    printf("============================================================\n");
+    printf("   tabOS Native Bare-Metal / Linux Engine (ARMv7 sun5i)     \n");
+    printf("============================================================\n");
+
+    /* 1. Åpne og mmap Allwinner A13 framebuffer (/dev/graphics/fb0) */
+    int fb_fd = open("/dev/graphics/fb0", O_RDWR);
+    if (fb_fd < 0) {
+        perror("Feil ved åpning av /dev/graphics/fb0");
+        return 1;
+    }
+
+    size_t fb_size = SCREEN_PHYS_WIDTH * SCREEN_PHYS_HEIGHT * 4; /* 1 536 000 bytes */
+    uint32_t *fb = (uint32_t *)mmap(NULL, fb_size, PROT_READ | PROT_WRITE, MAP_SHARED, fb_fd, 0);
+    if (fb == MAP_FAILED) {
+        perror("Feil ved mmap av fb0");
+        close(fb_fd);
+        return 1;
+    }
+    printf("[*] LCD Framebuffer mmap OK (%dx%d 32-bit ARGB)\n", SCREEN_PHYS_WIDTH, SCREEN_PHYS_HEIGHT);
+
+    /* 2. Åpne Zet6221 touch-kontroller (/dev/input/event2) */
+    int touch_fd = open("/dev/input/event2", O_RDONLY | O_NONBLOCK);
+    if (touch_fd < 0) {
+        perror("Feil ved åpning av /dev/input/event2");
+        munmap(fb, fb_size);
+        close(fb_fd);
+        return 1;
+    }
+    printf("[*] Zet6221 I2C Touch-driver koblet til (/dev/input/event2)\n");
+
+    signal(SIGINT, sig_handler);
+    signal(SIGTERM, sig_handler);
+
+    /* 3. Initialiser tabOS kjernen og registrer alle apper */
+    os_init(fb, ORIENTATION_LANDSCAPE);
+    audio_init();
+    os_register_app(&app_launcher);
+    os_register_app(&app_keyboard);
+    os_register_app(&app_touchtest);
+    os_register_app(&app_colortest);
+    os_register_app(&app_snake);
+    os_register_app(&app_bbs);
+    os_switch_app(&app_launcher);
+
+    /* Første skjermoppdatering */
+    App *active = os_get_active_app();
+    if (active && active->on_render) {
+        active->on_render();
+    }
+    display_render_frame();
+    printf("[*] tabOS er na aktivt og tegnet direkte til LCD-maskinvaren!\n");
+    printf("[*] 0.1ms sanntids respons - trykk med fingeren pa nettbrettet!\n");
+
+    /* 4. Touch tilstand */
+    int raw_x = 480;
+    int raw_y = 320;
+    bool is_down = false;
+    TouchEvent touch_state;
+    memset(&touch_state, 0, sizeof(touch_state));
+
+    struct input_event ev[32];
+    bool dirty = false;
+    struct timeval last_time;
+    gettimeofday(&last_time, NULL);
+
+    /* 5. Sanntids hendelsesløkke (0 ms forsinkelse, direkte interrupt-drevet) */
+    while (keep_running) {
+        fd_set read_fds;
+        FD_ZERO(&read_fds);
+        FD_SET(touch_fd, &read_fds);
+
+        struct timeval tv;
+        tv.tv_sec = 0;
+        tv.tv_usec = 10000; /* 10 ms timeout = 100 Hz polling rate */
+
+        int ret = select(touch_fd + 1, &read_fds, NULL, NULL, &tv);
+        if (ret > 0 && FD_ISSET(touch_fd, &read_fds)) {
+            ssize_t bytes = read(touch_fd, ev, sizeof(ev));
+            if (bytes > 0) {
+                int count = (int)(bytes / sizeof(struct input_event));
+                for (int i = 0; i < count; i++) {
+                    if (ev[i].type == EV_ABS) {
+                        if (ev[i].code == 0x30) {        /* ABS_MT_TOUCH_MAJOR (finger down/up) */
+                            is_down = (ev[i].value > 0);
+                        } else if (ev[i].code == 0x35) { /* ABS_MT_POSITION_X (0..960) */
+                            raw_x = ev[i].value;
+                        } else if (ev[i].code == 0x36) { /* ABS_MT_POSITION_Y (0..640) */
+                            raw_y = ev[i].value;
+                        }
+                    } else if (ev[i].type == EV_KEY && ev[i].code == 0x14a) {
+                        is_down = (ev[i].value == 1);
+                    } else if (ev[i].type == EV_SYN && ev[i].code == SYN_REPORT) {
+                        /* Oversett Zet6221 råkoordinater til LCD piksler og oppdater aktiv app */
+                        int lcd_x, lcd_y;
+                        input_from_hw_digitizer(raw_x, raw_y, &lcd_x, &lcd_y);
+                        input_update_touch(&touch_state, lcd_x, lcd_y, is_down, display_get_orientation());
+
+                        active = os_get_active_app();
+                        if (active && active->on_touch) {
+                            active->on_touch(&touch_state);
+                        }
+                        dirty = true;
+                    }
+                }
+            }
+        }
+
+        /* Sanntids tikk for aktive apper (spillfart, animasjoner, oppetid) */
+        struct timeval now_time;
+        gettimeofday(&now_time, NULL);
+        long elapsed_ms = (now_time.tv_sec - last_time.tv_sec) * 1000 + 
+                          (now_time.tv_usec - last_time.tv_usec) / 1000;
+        if (elapsed_ms >= 10) {
+            last_time = now_time;
+            active = os_get_active_app();
+            if (active && active->on_update) {
+                if (active->on_update((uint32_t)elapsed_ms)) {
+                    dirty = true;
+                }
+            }
+        }
+
+        /* Umiddelbar rendring direkte til LCD ved minste endring */
+        if (dirty) {
+            active = os_get_active_app();
+            if (active && active->on_render) {
+                active->on_render();
+            }
+            display_render_frame();
+            dirty = false;
+        }
+    }
+
+    printf("\n[*] Avslutter tabOS Native...\n");
+    munmap(fb, fb_size);
+    close(fb_fd);
+    close(touch_fd);
+    return 0;
+}

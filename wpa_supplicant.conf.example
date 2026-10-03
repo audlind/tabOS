@@ -1,0 +1,12 @@
+ctrl_interface=wlan0
+update_config=1
+device_type=0-00000000-0
+
+# Eksempel-konfigurasjon for trådløst nettverk (Wi-Fi)
+# Kopier denne filen til wpa_supplicant.conf og fyll inn ditt nettverk:
+network={
+	ssid="DittWiFiNettverk"
+	psk="DittHemmeligePassord"
+	key_mgmt=WPA-PSK
+	priority=10
+}

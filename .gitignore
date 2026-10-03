@@ -1,0 +1,20 @@
+# Binærfiler og bygg-artefakter
+tabos_arm
+*.o
+*.obj
+*.bin
+*.raw
+*.bmp
+*.so
+
+# Sensitive konfigurasjoner
+wpa_supplicant.conf
+
+# Midlertidige filer
+tools/__pycache__/
+*.pyc
+*.log
+disasm.txt
+
+# Behold skjermbilder i docs/screenshots
+!docs/screenshots/*.png
