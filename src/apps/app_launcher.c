@@ -89,11 +89,13 @@ static void launcher_render_portrait(void) {
 
     /* Vertikal Hovedmeny */
     display_draw_box(2, 12, 56, 17, "HOVEDMENY", ANSI_WHITE, ANSI_BLACK, ANSI_LIGHT_CYAN);
-    display_draw_button(5, 14, 50, "  [1] TELEHACK ONLINE BBS  ", ANSI_WHITE, ANSI_RED, (pressed_button_id == 1));
-    display_draw_button(5, 17, 50, "  [4] RETRO SNAKE (ARKADESPILL)    ", ANSI_WHITE, ANSI_GREEN, (pressed_button_id == 4));
-    display_draw_button(5, 20, 50, "  [5] TASTATUR-TEST (STORE TASTER) ", ANSI_WHITE, ANSI_GREEN, (pressed_button_id == 5));
-    display_draw_button(5, 23, 50, "  [6] TOUCH-TEST & TEGNEFLATE      ", ANSI_WHITE, ANSI_GREEN, (pressed_button_id == 6));
-    display_draw_button(5, 26, 50, "  [8] ANSI FARGE- & GRAFIKKTEST    ", ANSI_WHITE, ANSI_MAGENTA, (pressed_button_id == 8));
+    display_draw_button(5, 13, 50, "  [1] TELEHACK ARPANET BBS ", ANSI_WHITE, ANSI_RED, (pressed_button_id == 1));
+    display_draw_button(5, 15, 50, "  [2] VERTRAUEN SYNCHRONET ", ANSI_WHITE, ANSI_RED, (pressed_button_id == 2));
+    display_draw_button(5, 17, 50, "  [3] TITANTIC RETRO BBS   ", ANSI_WHITE, ANSI_RED, (pressed_button_id == 3));
+    display_draw_button(5, 19, 50, "  [4] RETRO SNAKE ARKADE   ", ANSI_WHITE, ANSI_GREEN, (pressed_button_id == 4));
+    display_draw_button(5, 21, 50, "  [5] TASTATUR-TEST (STORE)", ANSI_WHITE, ANSI_GREEN, (pressed_button_id == 5));
+    display_draw_button(5, 23, 50, "  [6] TOUCH-TEST & TEGNING ", ANSI_WHITE, ANSI_GREEN, (pressed_button_id == 6));
+    display_draw_button(5, 25, 50, "  [8] ANSI FARGE- & GRAFIKK", ANSI_WHITE, ANSI_MAGENTA, (pressed_button_id == 8));
 
     /* Statusboks */
     display_draw_box(2, 30, 56, 6, "TERMINAL STATUS", ANSI_WHITE, ANSI_BLACK, ANSI_LIGHT_GREEN);
@@ -139,13 +141,16 @@ static void launcher_touch(const TouchEvent *t) {
 
             switch (clicked) {
                 case 1:
+                    bbs_set_node(0);
                     os_switch_app(&app_bbs);
                     break;
                 case 2:
-                    snprintf(status_msg, sizeof(status_msg), "Aktiverer VERTRAUEN BBS (vert.synchro.net)...");
+                    bbs_set_node(1);
+                    os_switch_app(&app_bbs);
                     break;
                 case 3:
-                    snprintf(status_msg, sizeof(status_msg), "Aktiverer TITANTIC BBS (ttb.rgbbs.info)...");
+                    bbs_set_node(2);
+                    os_switch_app(&app_bbs);
                     break;
                 case 4:
                     os_switch_app(&app_snake);
@@ -171,14 +176,16 @@ static void launcher_touch(const TouchEvent *t) {
     } else {
         /* Portrett sjekk */
         if (t->is_down) {
-            if (input_hit_box(t, 5, 14, 50, 1))  pressed_button_id = 1;
-            else if (input_hit_box(t, 5, 17, 50, 1)) pressed_button_id = 4;
-            else if (input_hit_box(t, 5, 20, 50, 1)) pressed_button_id = 5;
-            else if (input_hit_box(t, 5, 23, 50, 1)) pressed_button_id = 6;
-            else if (input_hit_box(t, 5, 26, 50, 1)) pressed_button_id = 8;
-            else if (input_hit_box(t, 4, 41, 24, 1)) pressed_button_id = 7;
+            if (input_hit_box(t, 5, 13, 50, 1))       pressed_button_id = 1;
+            else if (input_hit_box(t, 5, 15, 50, 1))  pressed_button_id = 2;
+            else if (input_hit_box(t, 5, 17, 50, 1))  pressed_button_id = 3;
+            else if (input_hit_box(t, 5, 19, 50, 1))  pressed_button_id = 4;
+            else if (input_hit_box(t, 5, 21, 50, 1))  pressed_button_id = 5;
+            else if (input_hit_box(t, 5, 23, 50, 1))  pressed_button_id = 6;
+            else if (input_hit_box(t, 5, 25, 50, 1))  pressed_button_id = 8;
+            else if (input_hit_box(t, 4, 41, 24, 1))  pressed_button_id = 7;
             else if (input_hit_box(t, 32, 41, 24, 1)) pressed_button_id = 4;
-            else if (input_hit_box(t, 4, 45, 24, 1)) pressed_button_id = 5;
+            else if (input_hit_box(t, 4, 45, 24, 1))  pressed_button_id = 5;
             else if (input_hit_box(t, 32, 45, 24, 1)) pressed_button_id = 6;
         } else if (t->just_up) {
             int clicked = pressed_button_id;
@@ -188,6 +195,13 @@ static void launcher_touch(const TouchEvent *t) {
                 os_toggle_orientation();
                 snprintf(status_msg, sizeof(status_msg), "Skjerm rotert til LANDSKAP!");
             } else if (clicked == 1) {
+                bbs_set_node(0);
+                os_switch_app(&app_bbs);
+            } else if (clicked == 2) {
+                bbs_set_node(1);
+                os_switch_app(&app_bbs);
+            } else if (clicked == 3) {
+                bbs_set_node(2);
                 os_switch_app(&app_bbs);
             } else if (clicked == 4) {
                 os_switch_app(&app_snake);

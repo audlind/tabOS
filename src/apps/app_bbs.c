@@ -18,6 +18,51 @@
 #define MAX_TERM_COLS 100
 #define MAX_TERM_ROWS 40
 
+/* BBS Node Definisjon */
+typedef struct {
+    const char *name;
+    const char *short_name;
+    const char *host;
+    int port;
+    const char *default_ip;
+    const char *welcome_tip;
+} BbsNode;
+
+static const BbsNode BBS_NODES[3] = {
+    {
+        .name = "TELEHACK ARPANET BBS",
+        .short_name = "TELEHACK",
+        .host = "telehack.com",
+        .port = 23,
+        .default_ip = "64.13.139.230",
+        .welcome_tip = "ARPANET & 80-talls UNIX simulator. Kommandoer: help, zork, starwars"
+    },
+    {
+        .name = "VERTRAUEN SYNCHRONET BBS",
+        .short_name = "VERTRAUEN",
+        .host = "vert.synchro.net",
+        .port = 23,
+        .default_ip = "71.95.196.34",
+        .welcome_tip = "Synchronet moderskip & DOVE-Net. Trykk [GUEST] eller opprett ny bruker"
+    },
+    {
+        .name = "TITANTIC RETRO BBS",
+        .short_name = "TITANTIC",
+        .host = "ttb.rgbbs.info",
+        .port = 23,
+        .default_ip = "73.174.148.143",
+        .welcome_tip = "Klassisk dial-up style BBS. Trykk [GUEST] eller skriv kallenavn"
+    }
+};
+
+static int current_node_idx = 0;
+
+void bbs_set_node(int node_idx) {
+    if (node_idx >= 0 && node_idx < 3) {
+        current_node_idx = node_idx;
+    }
+}
+
 /* Nettverkstilstander */
 typedef enum {
     CONN_STATE_DISCONNECTED,
@@ -61,14 +106,16 @@ typedef enum {
     TELNET_DONT,
     TELNET_WILL,
     TELNET_WONT,
-    TELNET_SB
+    TELNET_SB,
+    TELNET_SB_DATA,
+    TELNET_SB_IAC
 } TelnetState;
 
 static TelnetState telnet_state = TELNET_NORMAL;
+static uint8_t telnet_sb_opt = 0;
 
 /* Touch tastatur tilstand */
 static int pressed_key_id = -1;
-static bool shift_active = false;
 
 /* Prototype funksjoner */
 static void bbs_connect(void);
@@ -81,12 +128,6 @@ static void bbs_handle_csi(char cmd);
 static void bbs_start_demo(void);
 
 static void bbs_start(void) {
-    bbs_term_clear();
-    bbs_term_puts("\033[36m============================================================\r\n");
-    bbs_term_puts("      tabOS CYBERDECK BBS TERMINAL - TELEHACK.COM:23       \r\n");
-    bbs_term_puts("============================================================\033[0m\r\n");
-    bbs_term_puts("Kobler til telehack.com over port 23...\r\n");
-    
     bbs_connect();
 }
 
@@ -312,6 +353,9 @@ static void bbs_term_puts(const char *s) {
 
 /* Telnet IAC protokollbehandling */
 static void bbs_process_incoming_byte(uint8_t b) {
+    int viewport_rows = (display_get_orientation() == ORIENTATION_PORTRAIT) ? 32 : 20;
+    int viewport_cols = (display_get_orientation() == ORIENTATION_PORTRAIT) ? 60 : 100;
+
     if (telnet_state == TELNET_NORMAL) {
         if (b == 0xFF) {
             telnet_state = TELNET_IAC;
@@ -319,7 +363,7 @@ static void bbs_process_incoming_byte(uint8_t b) {
             bbs_term_putc((char)b);
         }
     } else if (telnet_state == TELNET_IAC) {
-        if (b == 0xFD) { /* DO */
+        if (b == 0xFD) {        /* DO */
             telnet_state = TELNET_DO;
         } else if (b == 0xFE) { /* DONT */
             telnet_state = TELNET_DONT;
@@ -327,7 +371,7 @@ static void bbs_process_incoming_byte(uint8_t b) {
             telnet_state = TELNET_WILL;
         } else if (b == 0xFC) { /* WONT */
             telnet_state = TELNET_WONT;
-        } else if (b == 0xFA) { /* Subnegotiation */
+        } else if (b == 0xFA) { /* Subnegotiation Start */
             telnet_state = TELNET_SB;
         } else if (b == 0xFF) { /* Literal 0xFF */
             bbs_term_putc((char)0xFF);
@@ -336,22 +380,61 @@ static void bbs_process_incoming_byte(uint8_t b) {
             telnet_state = TELNET_NORMAL;
         }
     } else if (telnet_state == TELNET_DO) {
-        /* Server ber oss om noe. Svar WONT med mindre det er SGA (3) */
-        uint8_t reply[3] = {0xFF, (b == 3) ? (uint8_t)0xFB : (uint8_t)0xFC, b};
-        bbs_send_data((const char *)reply, 3);
+        /* Server ber oss om noe */
+        if (b == 31) { /* NAWS: Negotiate About Window Size */
+            uint8_t will_naws[3] = {0xFF, 0xFB, 31};
+            bbs_send_data((const char *)will_naws, 3);
+            uint8_t naws_sub[9] = {
+                0xFF, 0xFA, 31,
+                0, (uint8_t)viewport_cols,
+                0, (uint8_t)viewport_rows,
+                0xFF, 0xF0
+            };
+            bbs_send_data((const char *)naws_sub, 9);
+        } else if (b == 24) { /* TTYPE */
+            uint8_t will_ttype[3] = {0xFF, 0xFB, 24};
+            bbs_send_data((const char *)will_ttype, 3);
+        } else if (b == 3) {  /* SGA */
+            uint8_t will_sga[3] = {0xFF, 0xFB, 3};
+            bbs_send_data((const char *)will_sga, 3);
+        } else if (b == 1) {  /* ECHO */
+            uint8_t will_echo[3] = {0xFF, 0xFB, 1};
+            bbs_send_data((const char *)will_echo, 3);
+        } else {
+            uint8_t wont[3] = {0xFF, 0xFC, b};
+            bbs_send_data((const char *)wont, 3);
+        }
         telnet_state = TELNET_NORMAL;
     } else if (telnet_state == TELNET_DONT) {
         telnet_state = TELNET_NORMAL;
     } else if (telnet_state == TELNET_WILL) {
-        /* Server tilbyr noe. Svar DO hvis SGA (3) eller ECHO (1) */
-        uint8_t reply[3] = {0xFF, (b == 3 || b == 1) ? (uint8_t)0xFD : (uint8_t)0xFE, b};
-        bbs_send_data((const char *)reply, 3);
+        /* Server tilbyr noe */
+        if (b == 3 || b == 1) {
+            uint8_t do_opt[3] = {0xFF, 0xFD, b};
+            bbs_send_data((const char *)do_opt, 3);
+        } else {
+            uint8_t dont_opt[3] = {0xFF, 0xFE, b};
+            bbs_send_data((const char *)dont_opt, 3);
+        }
         telnet_state = TELNET_NORMAL;
     } else if (telnet_state == TELNET_WONT) {
         telnet_state = TELNET_NORMAL;
     } else if (telnet_state == TELNET_SB) {
-        if (b == 0xF0) { /* SE: Subnegotiation End */
+        telnet_sb_opt = b;
+        telnet_state = TELNET_SB_DATA;
+    } else if (telnet_state == TELNET_SB_DATA) {
+        if (b == 0xFF) {
+            telnet_state = TELNET_SB_IAC;
+        } else if (telnet_sb_opt == 24 && b == 1) {
+            /* TTYPE SEND forespørsel: svar med ANSI */
+            uint8_t ttype_ans[] = {0xFF, 0xFA, 24, 0, 'A', 'N', 'S', 'I', 0xFF, 0xF0};
+            bbs_send_data((const char *)ttype_ans, sizeof(ttype_ans));
+        }
+    } else if (telnet_state == TELNET_SB_IAC) {
+        if (b == 0xF0) { /* Subnegotiation End */
             telnet_state = TELNET_NORMAL;
+        } else {
+            telnet_state = TELNET_SB_DATA;
         }
     }
 }
@@ -362,11 +445,19 @@ static void bbs_connect(void) {
         sock_fd = -1;
     }
 
+    const BbsNode *node = &BBS_NODES[current_node_idx];
+
     bbs_term_clear();
     bbs_term_puts("\033[36m============================================================\r\n");
-    bbs_term_puts("      tabOS CYBERDECK BBS TERMINAL - TELEHACK.COM:23       \r\n");
+    char banner[100];
+    snprintf(banner, sizeof(banner), "      tabOS CYBERDECK BBS - %s\r\n", node->name);
+    bbs_term_puts(banner);
     bbs_term_puts("============================================================\033[0m\r\n");
-    bbs_term_puts("Kobler til telehack.com over port 23...\r\n");
+    char conn_msg[100];
+    snprintf(conn_msg, sizeof(conn_msg), "Kobler til %s:%d...\r\n", node->host, node->port);
+    bbs_term_puts(conn_msg);
+    bbs_term_puts(node->welcome_tip);
+    bbs_term_puts("\r\n\r\n");
 
     sock_fd = socket(AF_INET, SOCK_STREAM, 0);
     if (sock_fd < 0) {
@@ -383,27 +474,25 @@ static void bbs_connect(void) {
     struct sockaddr_in saddr;
     memset(&saddr, 0, sizeof(saddr));
     saddr.sin_family = AF_INET;
-    saddr.sin_port = htons(23);
+    saddr.sin_port = htons(node->port);
 
-    /* Telehack IP: 64.13.139.230 */
-    struct hostent *he = gethostbyname("telehack.com");
+    struct hostent *he = gethostbyname(node->host);
     if (he && he->h_addr_list && he->h_addr_list[0]) {
         memcpy(&saddr.sin_addr, he->h_addr_list[0], sizeof(struct in_addr));
     } else {
-        /* Fallback til direkte IP dersom DNS mangler */
-        inet_pton(AF_INET, "64.13.139.230", &saddr.sin_addr);
+        /* Fallback til direkte IP dersom DNS feiler */
+        inet_pton(AF_INET, node->default_ip, &saddr.sin_addr);
     }
 
     conn_state = CONN_STATE_CONNECTING;
     conn_timer = 0;
-    snprintf(status_text, sizeof(status_text), "Kobler til telehack.com...");
+    snprintf(status_text, sizeof(status_text), "Kobler til %s...", node->short_name);
 
     int res = connect(sock_fd, (struct sockaddr *)&saddr, sizeof(saddr));
     if (res == 0) {
         conn_state = CONN_STATE_CONNECTED;
-        snprintf(status_text, sizeof(status_text), "ONLINE (telehack.com:23)");
+        snprintf(status_text, sizeof(status_text), "ONLINE (%s)", node->short_name);
         audio_play(SOUND_START);
-        /* Send innledende telnet handshake */
         uint8_t init_telnet[] = { 0xFF, 0xFD, 0x03, '\r', '\n' };
         bbs_send_data((const char *)init_telnet, sizeof(init_telnet));
     } else if (errno == EINPROGRESS) {
@@ -428,10 +517,16 @@ static void bbs_send_data(const char *data, size_t len) {
     if (conn_state == CONN_STATE_CONNECTED && sock_fd >= 0) {
         send(sock_fd, data, len, 0);
     } else if (conn_state == CONN_STATE_DEMO) {
-        /* Ekkolodd i lokal demo-modus */
+        /* Ekkolodd i lokal offline-simulator */
         for (size_t i = 0; i < len; i++) {
             if (data[i] == '\r') {
-                bbs_term_puts("\r\n. Command? (Prøv f.eks: help, starwars, zork, weather, eliza)\r\n> ");
+                if (current_node_idx == 0) {
+                    bbs_term_puts("\r\n. Command? (Prøv f.eks: help, starwars, zork, weather, eliza)\r\n> ");
+                } else if (current_node_idx == 1) {
+                    bbs_term_puts("\r\n\033[32m[VERTRAUEN SYNCHRONET]\033[0m Logged on as Guest.\r\nMain Menu: [E]mail, [M]essages, [F]iles, [G]ames, [Q]uit\r\nCommand: ");
+                } else {
+                    bbs_term_puts("\r\n\033[33m[TITANTIC BBS]\033[0m Welcome to Node 1!\r\nMain BBS: [1] Chat, [2] Doors, [3] Forums, [X] Logoff\r\nSelect: ");
+                }
             } else if (data[i] == 0x03) {
                 bbs_term_puts("^C\r\n> ");
             } else if (data[i] == 0x08 || data[i] == 0x7F) {
@@ -445,14 +540,24 @@ static void bbs_send_data(const char *data, size_t len) {
 
 static void bbs_start_demo(void) {
     conn_state = CONN_STATE_DEMO;
-    snprintf(status_text, sizeof(status_text), "LOKAL DEMO (Koble til WiFi for ekte BBS)");
-    bbs_term_puts("\r\n\033[33m[!] Nettverk ikke tilgjengelig - starter lokal Telehack simulator!\033[0m\r\n");
-    bbs_term_puts("Connected to TELEHACK port 167 (tabOS offline mode)\r\n");
-    bbs_term_puts("There are 26657 hosts on the network.\r\n");
-    bbs_term_puts("May the command line live forever.\r\n\r\n");
-    bbs_term_puts("Command, one of: help, zork, starwars, eliza, cowsay, weather, newuser\r\n");
-    bbs_term_puts("Type NEWUSER to create an account. Press Ctrl-C to interrupt.\r\n");
-    bbs_term_puts(". \r\n> ");
+    const BbsNode *node = &BBS_NODES[current_node_idx];
+    snprintf(status_text, sizeof(status_text), "DEMO (%s)", node->short_name);
+    
+    bbs_term_puts("\r\n\033[33m[!] Nettverk ikke tilgjengelig - starter lokal BBS simulator!\033[0m\r\n");
+    if (current_node_idx == 0) {
+        bbs_term_puts("Connected to TELEHACK port 167 (tabOS offline mode)\r\n");
+        bbs_term_puts("There are 26657 hosts on the network. May the CLI live forever.\r\n\r\n");
+        bbs_term_puts("Commands: help, zork, starwars, eliza, cowsay, weather, newuser\r\n");
+        bbs_term_puts(". \r\n> ");
+    } else if (current_node_idx == 1) {
+        bbs_term_puts("Synchronet BBS for Win32 Version 3.22 (tabOS offline mode)\r\n");
+        bbs_term_puts("Welcome to Vertrauen - The Home of Synchronet!\r\n\r\n");
+        bbs_term_puts("Enter User ID or [G]uest: \r\n> ");
+    } else {
+        bbs_term_puts("The Titantic BBS (tabOS offline mode)\r\n");
+        bbs_term_puts("Welcome to The Titantic! Connecting at 57,600 bps V.90\r\n\r\n");
+        bbs_term_puts("Enter Handle or [G]uest: \r\n> ");
+    }
 }
 
 static bool bbs_update(uint32_t delta_ms) {
@@ -462,11 +567,10 @@ static bool bbs_update(uint32_t delta_ms) {
         conn_timer += delta_ms;
         if (conn_timer > 12000) { /* 12 sekunder timeout */
             conn_state = CONN_STATE_ERROR;
-            snprintf(status_text, sizeof(status_text), "Tidsavbrudd: WiFi ikke tilkoblet");
+            snprintf(status_text, sizeof(status_text), "Tidsavbrudd: %s", BBS_NODES[current_node_idx].short_name);
             bbs_start_demo();
             dirty = true;
         } else {
-            /* Sjekk om tilkoblingen er etablert */
             fd_set wfds;
             FD_ZERO(&wfds);
             FD_SET(sock_fd, &wfds);
@@ -478,9 +582,11 @@ static bool bbs_update(uint32_t delta_ms) {
                 getsockopt(sock_fd, SOL_SOCKET, SO_ERROR, &err, &len);
                 if (err == 0) {
                     conn_state = CONN_STATE_CONNECTED;
-                    snprintf(status_text, sizeof(status_text), "ONLINE (telehack.com:23)");
+                    snprintf(status_text, sizeof(status_text), "ONLINE (%s)", BBS_NODES[current_node_idx].short_name);
                     audio_play(SOUND_START);
-                    bbs_term_puts("\r\n\033[32m[*] Tilkoblet TELEHACK!\033[0m\r\n\r\n");
+                    bbs_term_puts("\r\n\033[32m[*] Tilkoblet ");
+                    bbs_term_puts(BBS_NODES[current_node_idx].name);
+                    bbs_term_puts("!\033[0m\r\n\r\n");
                     uint8_t init_telnet[] = { 0xFF, 0xFD, 0x03, '\r', '\n' };
                     bbs_send_data((const char *)init_telnet, sizeof(init_telnet));
                     dirty = true;
@@ -503,10 +609,9 @@ static bool bbs_update(uint32_t delta_ms) {
             }
             dirty = true;
         } else if (bytes == 0) {
-            /* Server lukket forbindelsen */
             bbs_disconnect();
             snprintf(status_text, sizeof(status_text), "Forbindelse lukket av tjener");
-            bbs_term_puts("\r\n\033[31m[!] Telehack koblet fra.\033[0m\r\n");
+            bbs_term_puts("\r\n\033[31m[!] BBS koblet fra.\033[0m\r\n");
             dirty = true;
         } else {
             if (errno != EAGAIN && errno != EWOULDBLOCK) {
@@ -520,7 +625,6 @@ static bool bbs_update(uint32_t delta_ms) {
     return dirty;
 }
 
-/* Helper for å tegne tast */
 static void draw_bbs_key(int col, int row, int w, int h, const char *label, bool pressed, AnsiColor fg, AnsiColor bg) {
     AnsiColor final_fg = pressed ? ANSI_BLACK : fg;
     AnsiColor final_bg = pressed ? ANSI_LIGHT_CYAN : bg;
@@ -556,13 +660,17 @@ static void bbs_render_portrait(void) {
 
     /* 1. Header (Rad 0..1) */
     display_draw_box(0, 0, 60, 2, "", ANSI_WHITE, ANSI_BLUE, ANSI_YELLOW);
-    display_draw_string(1, 0, "TELEHACK BBS", ANSI_WHITE, ANSI_BLUE);
+    
+    char title_buf[32];
+    snprintf(title_buf, sizeof(title_buf), "%s", BBS_NODES[current_node_idx].short_name);
+    display_draw_string(1, 0, title_buf, ANSI_WHITE, ANSI_BLUE);
     
     char status_sub[32];
-    snprintf(status_sub, sizeof(status_sub), "[%s]", (conn_state == CONN_STATE_CONNECTED) ? "ONLINE" : (conn_state == CONN_STATE_CONNECTING) ? "KOBLER..." : "DEMO");
-    display_draw_string(15, 0, status_sub, (conn_state == CONN_STATE_CONNECTED) ? ANSI_LIGHT_GREEN : ANSI_YELLOW, ANSI_BLUE);
+    snprintf(status_sub, sizeof(status_sub), "[%s]", (conn_state == CONN_STATE_CONNECTED) ? "ONLINE" : (conn_state == CONN_STATE_CONNECTING) ? "KOBLER" : "DEMO");
+    display_draw_string(12, 0, status_sub, (conn_state == CONN_STATE_CONNECTED) ? ANSI_LIGHT_GREEN : ANSI_YELLOW, ANSI_BLUE);
 
-    display_draw_button(46, 0, 13, "[X RETUR]", ANSI_WHITE, ANSI_RED, (pressed_key_id == 99));
+    display_draw_button(24, 0, 16, "[BYTT BBS]", ANSI_WHITE, ANSI_MAGENTA, (pressed_key_id == 98));
+    display_draw_button(43, 0, 16, "[X HOVEDMENY]", ANSI_WHITE, ANSI_RED, (pressed_key_id == 99));
 
     /* 2. Terminal Visningsvindu (Rad 2..33 = 32 rader x 60 kolonner) */
     for (int r = 0; r < 32; r++) {
@@ -571,9 +679,8 @@ static void bbs_render_portrait(void) {
             uint8_t fg = term_fg[r][c];
             uint8_t bg = term_bg[r][c];
 
-            /* Tegn blinkende / synlig markør */
             if (r == cursor_y && c == cursor_x) {
-                glyph = 0xDB; /* Full solid blokk */
+                glyph = 0xDB;
                 fg = ANSI_LIGHT_GREEN;
                 bg = ANSI_BLACK;
             }
@@ -582,12 +689,23 @@ static void bbs_render_portrait(void) {
     }
 
     /* 3. Hurtigmakroer / BBS Kommandoer (Rad 34) */
-    display_draw_button(0,  34, 10, "[HELP]",    ANSI_WHITE, ANSI_BLUE,    (pressed_key_id == 101));
-    display_draw_button(10, 34, 10, "[ZORK]",    ANSI_WHITE, ANSI_BLUE,    (pressed_key_id == 102));
-    display_draw_button(20, 34, 12, "[STARWARS]",ANSI_WHITE, ANSI_BLUE,    (pressed_key_id == 103));
-    display_draw_button(32, 34, 11, "[WEATHER]", ANSI_WHITE, ANSI_BLUE,    (pressed_key_id == 104));
-    display_draw_button(43, 34, 9,  "[ELIZA]",   ANSI_WHITE, ANSI_BLUE,    (pressed_key_id == 105));
-    display_draw_button(52, 34, 8,  "[USER]",    ANSI_WHITE, ANSI_MAGENTA, (pressed_key_id == 106));
+    if (current_node_idx == 0) {
+        /* Telehack makroer */
+        display_draw_button(0,  34, 10, "[HELP]",    ANSI_WHITE, ANSI_BLUE,    (pressed_key_id == 101));
+        display_draw_button(10, 34, 10, "[ZORK]",    ANSI_WHITE, ANSI_BLUE,    (pressed_key_id == 102));
+        display_draw_button(20, 34, 12, "[STARWARS]",ANSI_WHITE, ANSI_BLUE,    (pressed_key_id == 103));
+        display_draw_button(32, 34, 11, "[WEATHER]", ANSI_WHITE, ANSI_BLUE,    (pressed_key_id == 104));
+        display_draw_button(43, 34, 9,  "[ELIZA]",   ANSI_WHITE, ANSI_BLUE,    (pressed_key_id == 105));
+        display_draw_button(52, 34, 8,  "[USER]",    ANSI_WHITE, ANSI_MAGENTA, (pressed_key_id == 106));
+    } else {
+        /* Vertrauen & Titantic makroer */
+        display_draw_button(0,  34, 10, "[GUEST]",   ANSI_WHITE, ANSI_GREEN,   (pressed_key_id == 107));
+        display_draw_button(10, 34, 10, "[NEW]",     ANSI_WHITE, ANSI_MAGENTA, (pressed_key_id == 108));
+        display_draw_button(20, 34, 10, "[YES]",     ANSI_WHITE, ANSI_CYAN,    (pressed_key_id == 109));
+        display_draw_button(30, 34, 10, "[NO]",      ANSI_WHITE, ANSI_RED,     (pressed_key_id == 110));
+        display_draw_button(40, 34, 10, "[LOGOFF]",  ANSI_WHITE, ANSI_BROWN,   (pressed_key_id == 111));
+        display_draw_button(50, 34, 10, "[ENTER]",   ANSI_WHITE, ANSI_GREEN,   (pressed_key_id == 82));
+    }
 
     /* 4. Touch-tastatur (Rad 35..49 = 15 rader) */
     int kw = 5;
@@ -619,7 +737,7 @@ static void bbs_render_portrait(void) {
     }
     draw_bbs_key(50, 44, 10, kh, "SLETT", (pressed_key_id == 70), ANSI_WHITE, ANSI_RED);
 
-    /* Rad 5: MELLOMROM, ENTER, RECONNECT (Rad 47..49) */
+    /* Rad 5: KOBL-TIL, MELLOMROM, ENTER (Rad 47..49) */
     draw_bbs_key(0, 47, 12, kh, "KOBL-TIL", (pressed_key_id == 80), ANSI_WHITE, ANSI_BLUE);
     draw_bbs_key(13, 47, 30, kh, "MELLOMROM", (pressed_key_id == 81), ANSI_WHITE, ANSI_DARK_GRAY);
     draw_bbs_key(44, 47, 16, kh, "ENTER", (pressed_key_id == 82), ANSI_WHITE, ANSI_GREEN);
@@ -630,12 +748,17 @@ static void bbs_render_landscape(void) {
 
     /* 1. Header (Rad 0..1) */
     display_draw_box(0, 0, 100, 2, "", ANSI_WHITE, ANSI_BLUE, ANSI_YELLOW);
-    display_draw_string(2, 0, "TELEHACK ONLINE BBS TERMINAL (telehack.com:23)", ANSI_WHITE, ANSI_BLUE);
+    
+    char header_buf[64];
+    snprintf(header_buf, sizeof(header_buf), "%s", BBS_NODES[current_node_idx].name);
+    display_draw_string(2, 0, header_buf, ANSI_WHITE, ANSI_BLUE);
     
     char status_sub[48];
-    snprintf(status_sub, sizeof(status_sub), "STATUS: %s", status_text);
+    snprintf(status_sub, sizeof(status_sub), "[%s]", status_text);
     display_draw_string(52, 0, status_sub, ANSI_YELLOW, ANSI_BLUE);
-    display_draw_button(86, 0, 13, "[X RETUR]", ANSI_WHITE, ANSI_RED, (pressed_key_id == 99));
+    
+    display_draw_button(70, 0, 14, "[BYTT BBS]", ANSI_WHITE, ANSI_MAGENTA, (pressed_key_id == 98));
+    display_draw_button(85, 0, 14, "[X HOVEDMENY]", ANSI_WHITE, ANSI_RED, (pressed_key_id == 99));
 
     /* 2. Terminal Visningsvindu (Rad 2..20 = 19 rader x 100 kolonner) */
     for (int r = 0; r < 19; r++) {
@@ -654,28 +777,33 @@ static void bbs_render_landscape(void) {
     }
 
     /* 3. Hurtigknapper (Rad 21) */
-    display_draw_button(2,  21, 12, "[HELP]",    ANSI_WHITE, ANSI_BLUE, (pressed_key_id == 101));
-    display_draw_button(15, 21, 12, "[ZORK]",    ANSI_WHITE, ANSI_BLUE, (pressed_key_id == 102));
-    display_draw_button(28, 21, 14, "[STARWARS]",ANSI_WHITE, ANSI_BLUE, (pressed_key_id == 103));
-    display_draw_button(43, 21, 13, "[WEATHER]", ANSI_WHITE, ANSI_BLUE, (pressed_key_id == 104));
-    display_draw_button(57, 21, 12, "[ELIZA]",   ANSI_WHITE, ANSI_BLUE, (pressed_key_id == 105));
-    display_draw_button(70, 21, 14, "[NEWUSER]", ANSI_WHITE, ANSI_MAGENTA, (pressed_key_id == 106));
+    if (current_node_idx == 0) {
+        display_draw_button(2,  21, 12, "[HELP]",    ANSI_WHITE, ANSI_BLUE, (pressed_key_id == 101));
+        display_draw_button(15, 21, 12, "[ZORK]",    ANSI_WHITE, ANSI_BLUE, (pressed_key_id == 102));
+        display_draw_button(28, 21, 14, "[STARWARS]",ANSI_WHITE, ANSI_BLUE, (pressed_key_id == 103));
+        display_draw_button(43, 21, 13, "[WEATHER]", ANSI_WHITE, ANSI_BLUE, (pressed_key_id == 104));
+        display_draw_button(57, 21, 12, "[ELIZA]",   ANSI_WHITE, ANSI_BLUE, (pressed_key_id == 105));
+        display_draw_button(70, 21, 14, "[NEWUSER]", ANSI_WHITE, ANSI_MAGENTA, (pressed_key_id == 106));
+    } else {
+        display_draw_button(2,  21, 14, "[GUEST LOGON]", ANSI_WHITE, ANSI_GREEN,   (pressed_key_id == 107));
+        display_draw_button(18, 21, 14, "[NEW ACCOUNT]", ANSI_WHITE, ANSI_MAGENTA, (pressed_key_id == 108));
+        display_draw_button(34, 21, 12, "[YES / JA]",   ANSI_WHITE, ANSI_CYAN,    (pressed_key_id == 109));
+        display_draw_button(48, 21, 12, "[NO / NEI]",   ANSI_WHITE, ANSI_RED,     (pressed_key_id == 110));
+        display_draw_button(62, 21, 14, "[LOGOFF/QUIT]",ANSI_WHITE, ANSI_BROWN,   (pressed_key_id == 111));
+    }
     display_draw_button(85, 21, 13, "[KOBLE TIL]", ANSI_WHITE, ANSI_CYAN, (pressed_key_id == 80));
 
     /* 4. Tastatur i bunn (Rad 22..29) */
-    /* Rad 1: Tall 1..0, ? (Rad 22..24) */
     for (int i = 0; i < 10; i++) {
         char buf[2] = {'0' + (i + 1) % 10, '\0'};
         draw_bbs_key(5 + i * 9, 22, 8, 3, buf, (pressed_key_id == i + 1), ANSI_WHITE, ANSI_DARK_GRAY);
     }
 
-    /* Rad 2: QWERTY (Rad 25..27) */
     const char *r2[10] = {"Q","W","E","R","T","Y","U","I","O","P"};
     for (int i = 0; i < 10; i++) {
         draw_bbs_key(5 + i * 9, 25, 8, 3, r2[i], (pressed_key_id == i + 20), ANSI_LIGHT_CYAN, ANSI_DARK_GRAY);
     }
 
-    /* Rad 3: Kontroller (Rad 28..29) */
     display_draw_button(2,  28, 14, "[Ctrl-C]", ANSI_WHITE, ANSI_RED, (pressed_key_id == 60));
     display_draw_button(18, 28, 16, "[SLETT]", ANSI_WHITE, ANSI_RED, (pressed_key_id == 70));
     display_draw_button(36, 28, 36, "[ MELLOMROM ]", ANSI_WHITE, ANSI_DARK_GRAY, (pressed_key_id == 81));
@@ -695,19 +823,26 @@ static void bbs_touch(const TouchEvent *t) {
 
     if (orient == ORIENTATION_PORTRAIT) {
         if (t->is_down) {
-            /* Retur */
-            if (input_hit_box(t, 46, 0, 13, 2)) {
-                pressed_key_id = 99;
-                return;
-            }
+            /* Header */
+            if (input_hit_box(t, 24, 0, 16, 2)) { pressed_key_id = 98; return; }
+            if (input_hit_box(t, 43, 0, 16, 2)) { pressed_key_id = 99; return; }
 
             /* Hurtigmakroer rad 34 */
-            if (input_hit_box(t, 0,  34, 10, 1)) { pressed_key_id = 101; return; }
-            if (input_hit_box(t, 10, 34, 10, 1)) { pressed_key_id = 102; return; }
-            if (input_hit_box(t, 20, 34, 12, 1)) { pressed_key_id = 103; return; }
-            if (input_hit_box(t, 32, 34, 11, 1)) { pressed_key_id = 104; return; }
-            if (input_hit_box(t, 43, 34, 9,  1)) { pressed_key_id = 105; return; }
-            if (input_hit_box(t, 52, 34, 8,  1)) { pressed_key_id = 106; return; }
+            if (current_node_idx == 0) {
+                if (input_hit_box(t, 0,  34, 10, 1)) { pressed_key_id = 101; return; }
+                if (input_hit_box(t, 10, 34, 10, 1)) { pressed_key_id = 102; return; }
+                if (input_hit_box(t, 20, 34, 12, 1)) { pressed_key_id = 103; return; }
+                if (input_hit_box(t, 32, 34, 11, 1)) { pressed_key_id = 104; return; }
+                if (input_hit_box(t, 43, 34, 9,  1)) { pressed_key_id = 105; return; }
+                if (input_hit_box(t, 52, 34, 8,  1)) { pressed_key_id = 106; return; }
+            } else {
+                if (input_hit_box(t, 0,  34, 10, 1)) { pressed_key_id = 107; return; }
+                if (input_hit_box(t, 10, 34, 10, 1)) { pressed_key_id = 108; return; }
+                if (input_hit_box(t, 20, 34, 10, 1)) { pressed_key_id = 109; return; }
+                if (input_hit_box(t, 30, 34, 10, 1)) { pressed_key_id = 110; return; }
+                if (input_hit_box(t, 40, 34, 10, 1)) { pressed_key_id = 111; return; }
+                if (input_hit_box(t, 50, 34, 10, 1)) { pressed_key_id = 82;  return; }
+            }
 
             /* Tastatur Rad 1: Tall 1..0, ?, / (Rad 35..37) */
             if (t->grid_row >= 35 && t->grid_row <= 37) {
@@ -739,10 +874,10 @@ static void bbs_touch(const TouchEvent *t) {
             /* Tastatur Rad 4: CTRL-C, ZXCVBNM, BACK (Rad 44..46) */
             if (t->grid_row >= 44 && t->grid_row <= 46) {
                 if (t->grid_col < 8) {
-                    pressed_key_id = 60; /* Ctrl-C */
+                    pressed_key_id = 60;
                     return;
                 } else if (t->grid_col >= 50) {
-                    pressed_key_id = 70; /* Slett */
+                    pressed_key_id = 70;
                     return;
                 } else {
                     int idx = (t->grid_col - 8) / 6;
@@ -756,13 +891,13 @@ static void bbs_touch(const TouchEvent *t) {
             /* Tastatur Rad 5: KOBL-TIL, MELLOMROM, ENTER (Rad 47..49) */
             if (t->grid_row >= 47 && t->grid_row <= 49) {
                 if (t->grid_col < 13) {
-                    pressed_key_id = 80; /* Koble til */
+                    pressed_key_id = 80;
                     return;
                 } else if (t->grid_col < 44) {
-                    pressed_key_id = 81; /* Mellomrom */
+                    pressed_key_id = 81;
                     return;
                 } else {
-                    pressed_key_id = 82; /* Enter */
+                    pressed_key_id = 82;
                     return;
                 }
             }
@@ -774,14 +909,27 @@ static void bbs_touch(const TouchEvent *t) {
                 os_switch_app(&app_launcher);
                 return;
             }
+            if (key == 98) {
+                /* Bytt BBS Node */
+                current_node_idx = (current_node_idx + 1) % 3;
+                bbs_connect();
+                return;
+            }
 
-            /* Makroer */
+            /* Telehack Makroer */
             if (key == 101) { bbs_send_data("help\r", 5); return; }
             if (key == 102) { bbs_send_data("zork\r", 5); return; }
             if (key == 103) { bbs_send_data("starwars\r", 9); return; }
             if (key == 104) { bbs_send_data("weather\r", 8); return; }
             if (key == 105) { bbs_send_data("eliza\r", 6); return; }
             if (key == 106) { bbs_send_data("newuser\r", 8); return; }
+
+            /* Vertrauen/Titantic Makroer */
+            if (key == 107) { bbs_send_data("guest\r", 6); return; }
+            if (key == 108) { bbs_send_data("new\r", 4); return; }
+            if (key == 109) { bbs_send_data("y\r", 2); return; }
+            if (key == 110) { bbs_send_data("n\r", 2); return; }
+            if (key == 111) { bbs_send_data("q\r", 2); return; }
 
             /* Tall 1..0, ?, / */
             if (key >= 1 && key <= 12) {
@@ -816,26 +964,26 @@ static void bbs_touch(const TouchEvent *t) {
             }
 
             /* Kontroller */
-            if (key == 60) { /* Ctrl-C */
+            if (key == 60) {
                 char c = 0x03;
                 bbs_send_data(&c, 1);
                 return;
             }
-            if (key == 70) { /* Slett / Backspace */
+            if (key == 70) {
                 char c = 0x08;
                 bbs_send_data(&c, 1);
                 return;
             }
-            if (key == 80) { /* Koble til */
+            if (key == 80) {
                 bbs_connect();
                 return;
             }
-            if (key == 81) { /* Space */
+            if (key == 81) {
                 char c = ' ';
                 bbs_send_data(&c, 1);
                 return;
             }
-            if (key == 82) { /* Enter */
+            if (key == 82) {
                 char c = '\r';
                 bbs_send_data(&c, 1);
                 return;
@@ -844,14 +992,23 @@ static void bbs_touch(const TouchEvent *t) {
     } else {
         /* Landskap touch */
         if (t->is_down) {
-            if (input_hit_box(t, 86, 0, 13, 2)) { pressed_key_id = 99; return; }
+            if (input_hit_box(t, 70, 0, 14, 2)) { pressed_key_id = 98; return; }
+            if (input_hit_box(t, 85, 0, 14, 2)) { pressed_key_id = 99; return; }
 
-            if (input_hit_box(t, 2,  21, 12, 1)) { pressed_key_id = 101; return; }
-            if (input_hit_box(t, 15, 21, 12, 1)) { pressed_key_id = 102; return; }
-            if (input_hit_box(t, 28, 21, 14, 1)) { pressed_key_id = 103; return; }
-            if (input_hit_box(t, 43, 21, 13, 1)) { pressed_key_id = 104; return; }
-            if (input_hit_box(t, 57, 21, 12, 1)) { pressed_key_id = 105; return; }
-            if (input_hit_box(t, 70, 21, 14, 1)) { pressed_key_id = 106; return; }
+            if (current_node_idx == 0) {
+                if (input_hit_box(t, 2,  21, 12, 1)) { pressed_key_id = 101; return; }
+                if (input_hit_box(t, 15, 21, 12, 1)) { pressed_key_id = 102; return; }
+                if (input_hit_box(t, 28, 21, 14, 1)) { pressed_key_id = 103; return; }
+                if (input_hit_box(t, 43, 21, 13, 1)) { pressed_key_id = 104; return; }
+                if (input_hit_box(t, 57, 21, 12, 1)) { pressed_key_id = 105; return; }
+                if (input_hit_box(t, 70, 21, 14, 1)) { pressed_key_id = 106; return; }
+            } else {
+                if (input_hit_box(t, 2,  21, 14, 1)) { pressed_key_id = 107; return; }
+                if (input_hit_box(t, 18, 21, 14, 1)) { pressed_key_id = 108; return; }
+                if (input_hit_box(t, 34, 21, 12, 1)) { pressed_key_id = 109; return; }
+                if (input_hit_box(t, 48, 21, 12, 1)) { pressed_key_id = 110; return; }
+                if (input_hit_box(t, 62, 21, 14, 1)) { pressed_key_id = 111; return; }
+            }
             if (input_hit_box(t, 85, 21, 13, 1)) { pressed_key_id = 80;  return; }
 
             if (input_hit_box(t, 2,  28, 14, 2)) { pressed_key_id = 60; return; }
@@ -863,12 +1020,25 @@ static void bbs_touch(const TouchEvent *t) {
             pressed_key_id = -1;
 
             if (key == 99) { os_switch_app(&app_launcher); return; }
+            if (key == 98) {
+                current_node_idx = (current_node_idx + 1) % 3;
+                bbs_connect();
+                return;
+            }
+
             if (key == 101) { bbs_send_data("help\r", 5); return; }
             if (key == 102) { bbs_send_data("zork\r", 5); return; }
             if (key == 103) { bbs_send_data("starwars\r", 9); return; }
             if (key == 104) { bbs_send_data("weather\r", 8); return; }
             if (key == 105) { bbs_send_data("eliza\r", 6); return; }
             if (key == 106) { bbs_send_data("newuser\r", 8); return; }
+
+            if (key == 107) { bbs_send_data("guest\r", 6); return; }
+            if (key == 108) { bbs_send_data("new\r", 4); return; }
+            if (key == 109) { bbs_send_data("y\r", 2); return; }
+            if (key == 110) { bbs_send_data("n\r", 2); return; }
+            if (key == 111) { bbs_send_data("q\r", 2); return; }
+
             if (key == 80)  { bbs_connect(); return; }
             if (key == 60)  { char c = 0x03; bbs_send_data(&c, 1); return; }
             if (key == 70)  { char c = 0x08; bbs_send_data(&c, 1); return; }
@@ -879,8 +1049,8 @@ static void bbs_touch(const TouchEvent *t) {
 }
 
 App app_bbs = {
-    .name = "Telehack BBS",
-    .title = "Telehack Online Terminal",
+    .name = "Online BBS",
+    .title = "tabOS Cyberdeck BBS Terminal",
     .on_start = bbs_start,
     .on_update = bbs_update,
     .on_render = bbs_render,
