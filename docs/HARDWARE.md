@@ -122,3 +122,25 @@ Allwinner sunxi-plattformen bruker en spesiell binær maskinvarebeskrivelse kalt
 * **Touch Interrupt Pinne:** `EINT11` (GPIO `PG11`)
 * **Audio PA Enable:** `PG10`
 * **Wi-Fi Power Enable:** `PG12`
+
+---
+
+## 9. Bevegelsessensor og Akselerometer (G-Sensor)
+
+* **Sensorbrikke:** MEMSIC MXC622x (DTOS 2-akset / 3-akset digital akselerometer)
+* **I2C-buss:** `TWI1` (Adresse `0x15` / `21`)
+* **Kjernemoduler:**
+  * `mxc622x.ko` (I2C-driver og maskinvaregrensesnitt mot `/dev/mxc622x`)
+  * `mecs.ko` (MEMSIC e-compass / input event translator)
+* **Linux Input Node:** `/dev/input/event3` (`ecompass_data`)
+* **Bakgrunnsstøtte:** `/system/bin/memsicd`
+* **Dataområde (Input Events):**
+  * `ABS_X (0x00)`: $-131072 \dots +131072$
+  * `ABS_Y (0x01)`: $-131072 \dots +131072$
+  * `ABS_Z (0x02)`: $-131072 \dots +131072$
+  * Skala: $1\text{G} \approx 32\,768$
+* **tabOS Tilt- & Rotasjonsmotor (`sensor.c`):**
+  * **Sanntids non-blocking polling:** Integrert i `main.c` sin `select()`-løkke for 0 ms innvirkning på touch og framerate.
+  * **IIR Lavpassfilter:** Fjerner sensorstøy og mekaniske vibrasjoner.
+  * **Bordflatedeteksjon (Flat table guard):** Når $|Z| > 22\,000$ og $Z$ dominerer over $X$ og $Y$, gjenkjenner tabOS at brettet ligger flatt på et bord og **låser** nåværende orientering.
+  * **Hysterese & Debouncing:** Krever en forskjell på minst $7\,000$ enheter (~$12^\circ$) og en stabil holdetid på $350\text{ ms}$ før skjermen roterer automatisk. Dette forhindrer all blafring ved normal håndtering.

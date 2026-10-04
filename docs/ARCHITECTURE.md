@@ -139,3 +139,38 @@ Lydmotoren ([audio.c](file:///c:/AG-prosjekter/tabOS/src/audio.c)) leverer ekte 
 * Ved oppstart verifiseres lydfilene i `/data/local/tmp/`.
 * Avspilling skjer via en isolert `fork()` + `execl()` underprosess mot Allwinners Stagefright/ALSA pipeline.
 * `SIGCHLD` settes til `SIG_IGN` slik at fullførte lydprosesser ryddes opp umiddelbart av kjernen uten å etterlate zombier.
+
+---
+
+## 7. Bevegelses- og Tiltemotor (Sensor Subsystem)
+
+Tiltemotoren ([sensor.h](file:///c:/AG-prosjekter/tabOS/include/sensor.h), [sensor.c](file:///c:/AG-prosjekter/tabOS/src/sensor.c)) sørger for automatisk deteksjon og justering av skjermorientering:
+
+```mermaid
+flowchart TD
+    SENSOR_HW["MEMSIC MXC622x G-Sensor"] --> |"/dev/input/event3"| SELECT["select() Løkke (Non-blocking)"]
+    SELECT --> PROCESS["sensor_process_events()"]
+    PROCESS --> FILTER["IIR Lavpassfilter (Jitter & Vibrasjon)"]
+    FILTER --> EVAL["sensor_check_tilt()"]
+    EVAL --> FLAT{"Ligger brettet flatt? (|Z| > 22000)"}
+    FLAT -- Ja --> RETAIN["Behold nåværende orientering"]
+    FLAT -- Nei --> HYST{"Forskjell > 7000 enheter?"}
+    HYST -- Nei --> RETAIN
+    HYST -- Ja --> DEBOUNCE{"Holdt stabilt i 350 ms?"}
+    DEBOUNCE -- Ja --> ROTATE["os_set_orientation(ny)"]
+    DEBOUNCE -- Nei --> RETAIN
+    ROTATE --> RESIZE["active_app->on_resize()"]
+    RESIZE --> BLIT["display_render_frame()"]
+```
+
+1. **Non-blocking Event Multiplexing:**
+   Akselerometerets Linux-hendelsesnode (`/dev/input/event3`) overvåkes i samme `select()`-kall som berøringsskjermen. Dette eliminerer dedikerte tråder og låser.
+2. **IIR Lavpassfilter (Støyreduksjon):**
+   Rådata fra I2C-bussen glattes kontinuerlig ut:
+   $$\text{filt} = \frac{\text{filt} \times 3 + \text{raw}}{4}$$
+3. **Bordflatedeteksjon (Flat table guard):**
+   Når brettet legges på et bord, er gravitasjonen konsentrert i Z-aksen ($Z \approx -32\,768$). Sensoren undertrykker automatisk all rotasjon så lenge brettet hviler flatt.
+4. **Hysterese og Debouncing:**
+   For å hindre at skjermen vipper fram og tilbake ved ~45 graders vinkel, kreves en hysterese-terskel på 7 000 enheter samt en debounce-forsinkelse på 350 ms.
+5. **App-oppdatering ved rotasjon:**
+   Når orienteringen endres, varsles den aktive appen via `on_resize(cols, rows)`, slik at menyer, spillfelt og terminalbuffere umiddelbart tilpasser seg de nye dimensjonene.

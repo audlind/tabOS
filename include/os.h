@@ -22,6 +22,9 @@ App* os_get_active_app(void);
 /* Veksler mellom Landskap (100x30) og Portrett (60x50) */
 void os_toggle_orientation(void);
 
+/* Setter en eksplisitt skjermorientering */
+void os_set_orientation(ScreenOrientation orientation);
+
 /* Kjører én komplett system-syklus (input, update, render, flush) */
 void os_step(int touch_raw_x, int touch_raw_y, bool is_touch_down, uint32_t delta_ms);
 

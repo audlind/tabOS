@@ -27,6 +27,7 @@ echo [*] Kompilerer tabOS kjerne og alle applikasjoner...
     src/os.c ^
     src/display.c ^
     src/input.c ^
+    src/sensor.c ^
     src/audio.c ^
     src/apps/app_launcher.c ^
     src/apps/app_bbs.c ^

@@ -41,14 +41,19 @@ App* os_get_active_app(void) {
     return active_app;
 }
 
-void os_toggle_orientation(void) {
-    ScreenOrientation new_orient = (display_get_orientation() == ORIENTATION_LANDSCAPE) 
-                                   ? ORIENTATION_PORTRAIT 
-                                   : ORIENTATION_LANDSCAPE;
+void os_set_orientation(ScreenOrientation new_orient) {
+    if (display_get_orientation() == new_orient) return;
     display_set_orientation(new_orient);
     if (active_app && active_app->on_resize) {
         active_app->on_resize(display_get_cols(), display_get_rows());
     }
+}
+
+void os_toggle_orientation(void) {
+    ScreenOrientation new_orient = (display_get_orientation() == ORIENTATION_LANDSCAPE) 
+                                   ? ORIENTATION_PORTRAIT 
+                                   : ORIENTATION_LANDSCAPE;
+    os_set_orientation(new_orient);
 }
 
 void os_step(int touch_raw_x, int touch_raw_y, bool is_touch_down, uint32_t delta_ms) {

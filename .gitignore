@@ -6,6 +6,10 @@ tabos_arm
 *.raw
 *.bmp
 *.so
+*.ko
+tools/memsicd
+tools/sensor_test
+tools/ecs_nvm
 
 # Sensitive konfigurasjoner
 wpa_supplicant.conf

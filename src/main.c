@@ -14,6 +14,7 @@
 
 #include "os.h"
 #include "audio.h"
+#include "sensor.h"
 
 static volatile bool keep_running = true;
 
@@ -55,6 +56,7 @@ int main(int argc, char **argv) {
         return 1;
     }
     printf("[*] Zet6221 I2C Touch-driver koblet til (/dev/input/event2)\n");
+    int sensor_fd = sensor_init();
 
     signal(SIGINT, sig_handler);
     signal(SIGTERM, sig_handler);
@@ -96,38 +98,51 @@ int main(int argc, char **argv) {
         fd_set read_fds;
         FD_ZERO(&read_fds);
         FD_SET(touch_fd, &read_fds);
+        int max_fd = touch_fd;
+        if (sensor_fd >= 0) {
+            FD_SET(sensor_fd, &read_fds);
+            if (sensor_fd > max_fd) max_fd = sensor_fd;
+        }
 
         struct timeval tv;
         tv.tv_sec = 0;
         tv.tv_usec = 10000; /* 10 ms timeout = 100 Hz polling rate */
 
-        int ret = select(touch_fd + 1, &read_fds, NULL, NULL, &tv);
-        if (ret > 0 && FD_ISSET(touch_fd, &read_fds)) {
-            ssize_t bytes = read(touch_fd, ev, sizeof(ev));
-            if (bytes > 0) {
-                int count = (int)(bytes / sizeof(struct input_event));
-                for (int i = 0; i < count; i++) {
-                    if (ev[i].type == EV_ABS) {
-                        if (ev[i].code == 0x30) {        /* ABS_MT_TOUCH_MAJOR (finger down/up) */
-                            is_down = (ev[i].value > 0);
-                        } else if (ev[i].code == 0x35) { /* ABS_MT_POSITION_X (0..960) */
-                            raw_x = ev[i].value;
-                        } else if (ev[i].code == 0x36) { /* ABS_MT_POSITION_Y (0..640) */
-                            raw_y = ev[i].value;
-                        }
-                    } else if (ev[i].type == EV_KEY && ev[i].code == 0x14a) {
-                        is_down = (ev[i].value == 1);
-                    } else if (ev[i].type == EV_SYN && ev[i].code == SYN_REPORT) {
-                        /* Oversett Zet6221 råkoordinater til LCD piksler og oppdater aktiv app */
-                        int lcd_x, lcd_y;
-                        input_from_hw_digitizer(raw_x, raw_y, &lcd_x, &lcd_y);
-                        input_update_touch(&touch_state, lcd_x, lcd_y, is_down, display_get_orientation());
+        int ret = select(max_fd + 1, &read_fds, NULL, NULL, &tv);
+        if (ret > 0) {
+            /* Prosesser akselerometer-hendelser */
+            if (sensor_fd >= 0 && FD_ISSET(sensor_fd, &read_fds)) {
+                sensor_process_events(sensor_fd);
+            }
 
-                        active = os_get_active_app();
-                        if (active && active->on_touch) {
-                            active->on_touch(&touch_state);
+            /* Prosesser touch-hendelser */
+            if (FD_ISSET(touch_fd, &read_fds)) {
+                ssize_t bytes = read(touch_fd, ev, sizeof(ev));
+                if (bytes > 0) {
+                    int count = (int)(bytes / sizeof(struct input_event));
+                    for (int i = 0; i < count; i++) {
+                        if (ev[i].type == EV_ABS) {
+                            if (ev[i].code == 0x30) {        /* ABS_MT_TOUCH_MAJOR (finger down/up) */
+                                is_down = (ev[i].value > 0);
+                            } else if (ev[i].code == 0x35) { /* ABS_MT_POSITION_X (0..960) */
+                                raw_x = ev[i].value;
+                            } else if (ev[i].code == 0x36) { /* ABS_MT_POSITION_Y (0..640) */
+                                raw_y = ev[i].value;
+                            }
+                        } else if (ev[i].type == EV_KEY && ev[i].code == 0x14a) {
+                            is_down = (ev[i].value == 1);
+                        } else if (ev[i].type == EV_SYN && ev[i].code == SYN_REPORT) {
+                            /* Oversett Zet6221 råkoordinater til LCD piksler og oppdater aktiv app */
+                            int lcd_x, lcd_y;
+                            input_from_hw_digitizer(raw_x, raw_y, &lcd_x, &lcd_y);
+                            input_update_touch(&touch_state, lcd_x, lcd_y, is_down, display_get_orientation());
+
+                            active = os_get_active_app();
+                            if (active && active->on_touch) {
+                                active->on_touch(&touch_state);
+                            }
+                            dirty = true;
                         }
-                        dirty = true;
                     }
                 }
             }
@@ -140,6 +155,17 @@ int main(int argc, char **argv) {
                           (now_time.tv_usec - last_time.tv_usec) / 1000;
         if (elapsed_ms >= 10) {
             last_time = now_time;
+
+            /* Sjekk akselerometer for automatisk tilting / rotasjon */
+            ScreenOrientation cur_orient = display_get_orientation();
+            ScreenOrientation new_orient = cur_orient;
+            if (sensor_check_tilt(cur_orient, &new_orient, (uint32_t)elapsed_ms)) {
+                printf("[*] tabOS Sensor: Tilt oppdaget! Bytter orientering til %s\n",
+                       (new_orient == ORIENTATION_PORTRAIT) ? "PORTRETT" : "LANDSKAP");
+                os_set_orientation(new_orient);
+                dirty = true;
+            }
+
             active = os_get_active_app();
             if (active && active->on_update) {
                 if (active->on_update((uint32_t)elapsed_ms)) {
@@ -160,6 +186,7 @@ int main(int argc, char **argv) {
     }
 
     printf("\n[*] Avslutter tabOS Native...\n");
+    if (sensor_fd >= 0) close(sensor_fd);
     munmap(fb, fb_size);
     close(fb_fd);
     close(touch_fd);
