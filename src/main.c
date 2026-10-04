@@ -82,6 +82,7 @@ int main(int argc, char **argv) {
     os_register_app(&app_snake);
     os_register_app(&app_bbs);
     os_register_app(&app_settings);
+    os_register_app(&app_synth);
     os_switch_app(&app_launcher);
 
     /* Første skjermoppdatering */

@@ -198,3 +198,43 @@ Strømstyringsmodulen ([power.h](file:///c:/AG-prosjekter/tabOS/include/power.h)
 * Telemetridata leses asynkront fra AXP209 PMIC sysfs-driveren.
 * For å unngå ulineære hopp fra en ukalibrert AXP209 coulomb-teller, beregner tabOS reell kapasitet fra cellens kjemiske hvilespenning (OCV) filtrert med et eksponensielt glidende gjennomsnitt (EMA). Brukeren kan via innstillingsmenyen veksle mellom `SMART VOLT (OCV)` og `AXP209 RAW CHIP`.
 
+---
+
+## 9. NES Retro Synthesizer & DSP Lydmotor (Audio Synthesis)
+
+tabOS inkluderer en lettvekts, selvstendig lydsyntesemotor ([synth.h](file:///c:/AG-prosjekter/tabOS/include/synth.h), [synth.c](file:///c:/AG-prosjekter/tabOS/src/synth.c)) modellert etter Ricoh 2A03 APU (kjent fra Nintendo Entertainment System / Famicom), kombinert med en interaktiv berøringsapp ([app_synth.c](file:///c:/AG-prosjekter/tabOS/src/apps/app_synth.c)):
+
+### 9.1 Syntesekanaler og Lydbrikkearkitektur
+Motoren genererer 44.1 kHz signed 16-bit PCM-lyd uten eksterne avhengigheter:
+1. **Pulse / Firkantbølgekanal 1 & 2:**
+   * Faseakkumulator med fire valgbare duty-cycles:
+     * $12.5\%$ (1/8 puls - skarp, tynn og nasal)
+     * $25.0\%$ (2/8 puls - klassisk NES blyt og chiptune-karakter)
+     * $50.0\%$ (4/8 puls - ren symmetrisk firkantbølge)
+     * $75.0\%$ (invertert 25%)
+   * Støtter individuell frekvens, volum (0..15) og unison detuning for fyldig analog synth-lyd.
+2. **Triangle / Trekantbølgekanal:**
+   * 16-trinns klassisk trekantgenerator med fast full amplitude, ideell for dype bassganger og varme melodilinjer.
+3. **Noise / 15-bit LFSR Støykanal:**
+   * Lineært tilbakemeldings-skiftregister (Linear Feedback Shift Register):
+     $$\text{feedback} = \text{bit}_0 \oplus \text{bit}_1$$
+     $$\text{lfsr} = (\text{lfsr} \gg 1) \mid (\text{feedback} \ll 14)$$
+   * Kontrollert av en frekvensdeler som skaper en lo-fi metallisk og retro arkadestøy (perkussjon, skudd, eksplosjoner).
+
+### 9.2 DSP Filtere og Lydeffekter
+* **1-pols Rekursivt IIR Lavpassfilter (LPF):**
+  $$y[n] = y[n-1] + \alpha (x[n] - y[n-1])$$
+  Hvor $\alpha = \text{cutoff}^2$ gir en naturlig logaritmisk feie-respons.
+* **Lo-Fi Bitcrusher:**
+  Kvantiserer dynamikkområdet til 8-bit eller 4-bit for ekte "crunchy" retro arkadekvalitet.
+* **ADSR Volum-konvolutt:**
+  Former dynamikken til tonene med konfigurerbar Attack, Decay, Sustain og Release.
+* **Soft/Hard Limiter:**
+  Forhindrer digital klipping under flerspors summering i miksebufferen (`mix_nes_buffer`).
+
+### 9.3 Interaktivt Touch Piano & Oscilloskop
+* **Live ASCII Oscilloskop:** Sampler miksebufferen i sanntid og plotter den aktive bølgeformen (`▀`, `▄`, `█`) i et retro terminalvindu.
+* **13-toners Kromatisk Klaver:** Full kromatisk oktav med hvite og sorte tangenter tilpasset berøringsskjermen, med veksling mellom oktav 3, 4 og 5.
+* **Arkade- og Fanfarepresets:** Lynraske one-shot triggere for klassisk laser, mynt, eksplosjon, 1-UP fanfare og automatisk 8-toners chiptune-arpeggio.
+
+
