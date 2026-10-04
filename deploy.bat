@@ -15,8 +15,8 @@ if not exist tabos_arm (
     if %errorlevel% neq 0 exit /b %errorlevel%
 )
 
-echo [*] Stopper eventuell kjorende tabOS-prosess...
-adb shell "/system/bin/busybox killall -9 tabos 2>/dev/null; true"
+echo [*] Stopper eventuell kjorende Android SurfaceFlinger og tabOS...
+adb shell "stop 2>/dev/null; /system/bin/busybox killall -9 tabos 2>/dev/null; true"
 
 echo [*] Pusher tabos_arm til /data/local/tmp/tabos...
 adb push tabos_arm /data/local/tmp/tabos
