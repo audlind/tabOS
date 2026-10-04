@@ -31,6 +31,7 @@ echo [*] Kompilerer tabOS kjerne og alle applikasjoner...
     src/audio.c ^
     src/power.c ^
     src/synth.c ^
+    src/camera.c ^
     src/apps/app_launcher.c ^
     src/apps/app_bbs.c ^
     src/apps/app_snake.c ^
@@ -39,6 +40,7 @@ echo [*] Kompilerer tabOS kjerne og alle applikasjoner...
     src/apps/app_colortest.c ^
     src/apps/app_settings.c ^
     src/apps/app_synth.c ^
+    src/apps/app_camera.c ^
     -lm -o tabos_arm
 
 if %errorlevel% neq 0 (

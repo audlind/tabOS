@@ -54,7 +54,7 @@ static void launcher_render_landscape(void) {
     display_draw_box(36, 12, 28, 12, "TEST & APPER", ANSI_WHITE, ANSI_BLACK, ANSI_LIGHT_GREEN);
     display_draw_button(38, 14, 24, " [4] RETRO SNAKE  ", ANSI_WHITE, ANSI_GREEN, (pressed_button_id == 4));
     display_draw_button(38, 17, 24, " [5] TASTATUR-TEST", ANSI_WHITE, ANSI_GREEN, (pressed_button_id == 5));
-    display_draw_button(38, 20, 24, " [6] TOUCH-TEST   ", ANSI_WHITE, ANSI_GREEN, (pressed_button_id == 6));
+    display_draw_button(38, 20, 24, " [6] ASCII CYBER-CAM", ANSI_WHITE, ANSI_LIGHT_GREEN, (pressed_button_id == 6));
 
     /* Kolonne 3: Kontrollpanel & Grafikk */
     display_draw_box(68, 12, 28, 12, "KONTROLLPANEL", ANSI_WHITE, ANSI_BLACK, ANSI_LIGHT_MAGENTA);
@@ -98,7 +98,7 @@ static void launcher_render_portrait(void) {
     display_draw_button(5, 17, 50, "  [3] TITANTIC RETRO BBS   ", ANSI_WHITE, ANSI_RED, (pressed_button_id == 3));
     display_draw_button(5, 19, 50, "  [4] RETRO SNAKE ARKADE   ", ANSI_WHITE, ANSI_GREEN, (pressed_button_id == 4));
     display_draw_button(5, 21, 50, "  [5] TASTATUR-TEST (STORE)", ANSI_WHITE, ANSI_GREEN, (pressed_button_id == 5));
-    display_draw_button(5, 23, 50, "  [6] TOUCH-TEST & TEGNING ", ANSI_WHITE, ANSI_GREEN, (pressed_button_id == 6));
+    display_draw_button(5, 23, 50, "  [6] ASCII CYBER-CAM      ", ANSI_WHITE, ANSI_LIGHT_GREEN, (pressed_button_id == 6));
     display_draw_button(5, 25, 50, "  [7] INNSTILLINGER & STROM", ANSI_WHITE, ANSI_MAGENTA, (pressed_button_id == 7));
     display_draw_button(5, 27, 50, "  [8] NES SYNTHESIZER & LYD", ANSI_WHITE, ANSI_LIGHT_CYAN, (pressed_button_id == 8));
     display_draw_button(5, 29, 50, "  [9] ANSI FARGE- & GRAFIKK", ANSI_WHITE, ANSI_MAGENTA, (pressed_button_id == 9));
@@ -164,7 +164,7 @@ static void launcher_touch(const TouchEvent *t) {
                     os_switch_app(&app_keyboard);
                     break;
                 case 6:
-                    os_switch_app(&app_touchtest);
+                    os_switch_app(&app_camera);
                     break;
                 case 7:
                     os_switch_app(&app_settings);
@@ -211,7 +211,7 @@ static void launcher_touch(const TouchEvent *t) {
             } else if (clicked == 5) {
                 os_switch_app(&app_keyboard);
             } else if (clicked == 6) {
-                os_switch_app(&app_touchtest);
+                os_switch_app(&app_camera);
             } else if (clicked == 7) {
                 os_switch_app(&app_settings);
             } else if (clicked == 8) {
