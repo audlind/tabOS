@@ -48,7 +48,7 @@ int main(int argc, char **argv) {
     }
     printf("[*] LCD Framebuffer mmap OK (%dx%d 32-bit ARGB)\n", SCREEN_PHYS_WIDTH, SCREEN_PHYS_HEIGHT);
 
-    /* 2. Åpne Zet6221 touch-kontroller (/dev/input/event2) og Power-tast (/dev/input/event1) */
+    /* 2. Åpne Zet6221 touch-kontroller, Power-tast og fysiske knapper (/dev/input/event0) */
     int touch_fd = open("/dev/input/event2", O_RDONLY | O_NONBLOCK);
     if (touch_fd < 0) {
         perror("Feil ved åpning av /dev/input/event2");
@@ -58,6 +58,10 @@ int main(int argc, char **argv) {
     }
     printf("[*] Zet6221 I2C Touch-driver koblet til (/dev/input/event2)\n");
     int pwr_fd = open("/dev/input/event1", O_RDONLY | O_NONBLOCK);
+    int kbd_fd = open("/dev/input/event0", O_RDONLY | O_NONBLOCK);
+    if (kbd_fd >= 0) {
+        printf("[*] Fysiske taster koblet til (/dev/input/event0 - Volum+/Volum-)\n");
+    }
     int sensor_fd = sensor_init();
 
     signal(SIGINT, sig_handler);
@@ -117,6 +121,10 @@ int main(int argc, char **argv) {
             FD_SET(pwr_fd, &read_fds);
             if (pwr_fd > max_fd) max_fd = pwr_fd;
         }
+        if (kbd_fd >= 0) {
+            FD_SET(kbd_fd, &read_fds);
+            if (kbd_fd > max_fd) max_fd = kbd_fd;
+        }
         if (sensor_fd >= 0) {
             FD_SET(sensor_fd, &read_fds);
             if (sensor_fd > max_fd) max_fd = sensor_fd;
@@ -136,6 +144,26 @@ int main(int argc, char **argv) {
                     power_notify_activity();
                     power_set_brightness(190);
                     dirty = true;
+                }
+            }
+            /* Fysiske knapper på siden (Volum opp / Volum ned) */
+            if (kbd_fd >= 0 && FD_ISSET(kbd_fd, &read_fds)) {
+                struct input_event kev[8];
+                ssize_t kb = read(kbd_fd, kev, sizeof(kev));
+                if (kb > 0) {
+                    int kcount = (int)(kb / sizeof(struct input_event));
+                    for (int i = 0; i < kcount; i++) {
+                        if (kev[i].type == EV_KEY && (kev[i].value == 1 || kev[i].value == 2)) {
+                            power_notify_activity();
+                            if (kev[i].code == 115) { /* KEY_VOLUMEUP */
+                                audio_volume_up();
+                                dirty = true;
+                            } else if (kev[i].code == 114) { /* KEY_VOLUMEDOWN */
+                                audio_volume_down();
+                                dirty = true;
+                            }
+                        }
+                    }
                 }
             }
             /* Prosesser akselerometer-hendelser */
@@ -194,6 +222,11 @@ int main(int argc, char **argv) {
                 dirty = true;
             }
 
+            /* Oppdater volum-HUD timer */
+            if (audio_vol_hud_update((uint32_t)elapsed_ms)) {
+                dirty = true;
+            }
+
             /* Sjekk akselerometer for automatisk tilting / rotasjon */
             ScreenOrientation cur_orient = display_get_orientation();
             ScreenOrientation new_orient = cur_orient;
@@ -224,6 +257,9 @@ int main(int argc, char **argv) {
             if (active && active->on_render) {
                 active->on_render();
             }
+            if (audio_vol_hud_active()) {
+                audio_render_vol_hud();
+            }
             display_render_frame();
             dirty = false;
         }
@@ -232,6 +268,8 @@ int main(int argc, char **argv) {
     printf("\n[*] Avslutter tabOS Native...\n");
     power_close();
     if (sensor_fd >= 0) close(sensor_fd);
+    if (kbd_fd >= 0) close(kbd_fd);
+    if (pwr_fd >= 0) close(pwr_fd);
     munmap(fb, fb_size);
     close(fb_fd);
     close(touch_fd);

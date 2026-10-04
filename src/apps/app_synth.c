@@ -7,6 +7,7 @@
 #include "display.h"
 #include "input.h"
 #include "os.h"
+#include "audio.h"
 #include "synth.h"
 
 /* Standard frekvenser for oktav 4 (C4 .. C5) */
@@ -123,13 +124,20 @@ static void synth_render_landscape(void) {
     display_draw_button(68, 14, 12, "[5: BASS]  ", ANSI_WHITE, ANSI_CYAN, false);
     display_draw_button(82, 14, 12, "[RIFF LOOP]", ANSI_WHITE, ANSI_MAGENTA, false);
 
-    /* Oktavvalg & Statuslinje */
+    /* Oktavvalg & Volum & Statuslinje */
     char oct_buf[32];
-    snprintf(oct_buf, sizeof(oct_buf), "AKTIV OKTAV: %d", g_current_octave);
+    snprintf(oct_buf, sizeof(oct_buf), "OKTAV: %d", g_current_octave);
     display_draw_string(2, 17, oct_buf, ANSI_LIGHT_CYAN, ANSI_BLACK);
-    display_draw_button(20, 17, 12, " [OKT 3] ", ANSI_WHITE, (g_current_octave == 3) ? ANSI_CYAN : ANSI_DARK_GRAY, false);
-    display_draw_button(34, 17, 12, " [OKT 4] ", ANSI_WHITE, (g_current_octave == 4) ? ANSI_CYAN : ANSI_DARK_GRAY, false);
-    display_draw_button(48, 17, 12, " [OKT 5] ", ANSI_WHITE, (g_current_octave == 5) ? ANSI_CYAN : ANSI_DARK_GRAY, false);
+    display_draw_button(12, 17, 8, "[OKT 3]", ANSI_WHITE, (g_current_octave == 3) ? ANSI_CYAN : ANSI_DARK_GRAY, false);
+    display_draw_button(21, 17, 8, "[OKT 4]", ANSI_WHITE, (g_current_octave == 4) ? ANSI_CYAN : ANSI_DARK_GRAY, false);
+    display_draw_button(30, 17, 8, "[OKT 5]", ANSI_WHITE, (g_current_octave == 5) ? ANSI_CYAN : ANSI_DARK_GRAY, false);
+
+    /* Volumknapper */
+    char vol_buf[16];
+    snprintf(vol_buf, sizeof(vol_buf), "VOL:%3d%%", audio_get_volume_pct());
+    display_draw_string(40, 17, vol_buf, ANSI_LIGHT_GREEN, ANSI_BLACK);
+    display_draw_button(51, 17, 5, "[-]", ANSI_WHITE, ANSI_BLUE, false);
+    display_draw_button(57, 17, 5, "[+]", ANSI_WHITE, ANSI_BLUE, false);
 
     display_draw_string(64, 17, g_status_msg, ANSI_YELLOW, ANSI_BLACK);
 
@@ -197,13 +205,19 @@ static void synth_render_portrait(void) {
     display_draw_button(30, 19, 11, "[BOOM] ", ANSI_WHITE, ANSI_RED, false);
     display_draw_button(43, 19, 13, "[RIFF]", ANSI_WHITE, ANSI_MAGENTA, false);
 
-    /* Oktav */
-    display_draw_string(4, 23, "OKTAV:", ANSI_LIGHT_CYAN, ANSI_BLACK);
-    display_draw_button(14, 23, 11, "[OKT 3]", ANSI_WHITE, (g_current_octave == 3) ? ANSI_CYAN : ANSI_DARK_GRAY, false);
-    display_draw_button(27, 23, 11, "[OKT 4]", ANSI_WHITE, (g_current_octave == 4) ? ANSI_CYAN : ANSI_DARK_GRAY, false);
-    display_draw_button(40, 23, 11, "[OKT 5]", ANSI_WHITE, (g_current_octave == 5) ? ANSI_CYAN : ANSI_DARK_GRAY, false);
+    /* Oktav & Volum */
+    display_draw_string(2, 23, "OKT:", ANSI_LIGHT_CYAN, ANSI_BLACK);
+    display_draw_button(7, 23, 7, "[O3]", ANSI_WHITE, (g_current_octave == 3) ? ANSI_CYAN : ANSI_DARK_GRAY, false);
+    display_draw_button(15, 23, 7, "[O4]", ANSI_WHITE, (g_current_octave == 4) ? ANSI_CYAN : ANSI_DARK_GRAY, false);
+    display_draw_button(23, 23, 7, "[O5]", ANSI_WHITE, (g_current_octave == 5) ? ANSI_CYAN : ANSI_DARK_GRAY, false);
 
-    display_draw_string(4, 25, g_status_msg, ANSI_YELLOW, ANSI_BLACK);
+    char vol_p_buf[16];
+    snprintf(vol_p_buf, sizeof(vol_p_buf), "VOL:%2d%%", audio_get_volume_pct());
+    display_draw_string(32, 23, vol_p_buf, ANSI_LIGHT_GREEN, ANSI_BLACK);
+    display_draw_button(43, 23, 7, "[-]", ANSI_WHITE, ANSI_BLUE, false);
+    display_draw_button(51, 23, 7, "[+]", ANSI_WHITE, ANSI_BLUE, false);
+
+    display_draw_string(2, 25, g_status_msg, ANSI_YELLOW, ANSI_BLACK);
 
     /* Store Portrett-tangenter (Rad 27 til 48) */
     display_draw_box(1, 26, 58, 22, "PIANO TANGENTER", ANSI_WHITE, ANSI_BLACK, ANSI_LIGHT_GREEN);
@@ -256,53 +270,52 @@ static void synth_app_touch(const TouchEvent *t) {
     if (orientation_is_landscape(orient)) {
         if (t->is_down) {
             /* Tilbake til launcher */
-            if (input_hit_box(t, 74, 1, 24, 1)) {
+            if (t->just_down && input_hit_box(t, 74, 1, 24, 1)) {
                 os_switch_app(&app_launcher);
                 return;
             }
 
-            /* Kanaler */
-            if (input_hit_box(t, 44, 4, 25, 2)) {
-                /* Pulse 1: veksle duty eller av/på */
+            /* Kanaler - kun ved et nytt trykk */
+            if (t->just_down && input_hit_box(t, 44, 4, 25, 2)) {
                 s->pulse1.duty = (PulseDuty)((s->pulse1.duty + 1) % 4);
                 update_oscilloscope();
                 return;
             }
-            if (input_hit_box(t, 71, 4, 25, 2)) {
+            if (t->just_down && input_hit_box(t, 71, 4, 25, 2)) {
                 s->pulse2.enabled = !s->pulse2.enabled;
                 update_oscilloscope();
                 return;
             }
-            if (input_hit_box(t, 44, 7, 25, 2)) {
+            if (t->just_down && input_hit_box(t, 44, 7, 25, 2)) {
                 s->triangle.enabled = !s->triangle.enabled;
                 update_oscilloscope();
                 return;
             }
-            if (input_hit_box(t, 71, 7, 25, 2)) {
+            if (t->just_down && input_hit_box(t, 71, 7, 25, 2)) {
                 s->noise.enabled = !s->noise.enabled;
                 update_oscilloscope();
                 return;
             }
 
             /* Filter LPF */
-            if (input_hit_box(t, 4, 14, 10, 1)) {
+            if (t->just_down && input_hit_box(t, 4, 14, 10, 1)) {
                 s->filter.lpf_enabled = !s->filter.lpf_enabled;
                 update_oscilloscope();
                 return;
             }
-            if (input_hit_box(t, 16, 14, 7, 1)) {
+            if (t->just_down && input_hit_box(t, 16, 14, 7, 1)) {
                 s->filter.cutoff -= 0.10f;
                 if (s->filter.cutoff < 0.10f) s->filter.cutoff = 0.10f;
                 update_oscilloscope();
                 return;
             }
-            if (input_hit_box(t, 25, 14, 7, 1)) {
+            if (t->just_down && input_hit_box(t, 25, 14, 7, 1)) {
                 s->filter.cutoff += 0.10f;
                 if (s->filter.cutoff > 1.0f) s->filter.cutoff = 1.0f;
                 update_oscilloscope();
                 return;
             }
-            if (input_hit_box(t, 34, 14, 14, 1)) {
+            if (t->just_down && input_hit_box(t, 34, 14, 14, 1)) {
                 if (s->filter.bitcrush == 0) s->filter.bitcrush = 8;
                 else if (s->filter.bitcrush == 8) s->filter.bitcrush = 4;
                 else s->filter.bitcrush = 0;
@@ -310,24 +323,30 @@ static void synth_app_touch(const TouchEvent *t) {
                 return;
             }
 
-            /* Presets */
-            if (input_hit_box(t, 54, 12, 12, 1)) { synth_play_preset(1); snprintf(g_status_msg, sizeof(g_status_msg), "Lydeffekt: Laser Blaster"); update_oscilloscope(); return; }
-            if (input_hit_box(t, 68, 12, 12, 1)) { synth_play_preset(2); snprintf(g_status_msg, sizeof(g_status_msg), "Lydeffekt: Retro Coin"); update_oscilloscope(); return; }
-            if (input_hit_box(t, 82, 12, 12, 1)) { synth_play_preset(3); snprintf(g_status_msg, sizeof(g_status_msg), "Lydeffekt: 8-bit Eksplosjon"); update_oscilloscope(); return; }
-            if (input_hit_box(t, 54, 14, 12, 1)) { synth_play_preset(4); snprintf(g_status_msg, sizeof(g_status_msg), "Lydeffekt: 1-UP Fanfare"); update_oscilloscope(); return; }
-            if (input_hit_box(t, 68, 14, 12, 1)) { synth_play_preset(5); snprintf(g_status_msg, sizeof(g_status_msg), "Lydeffekt: Chiptune Bass"); update_oscilloscope(); return; }
-            if (input_hit_box(t, 82, 14, 12, 1)) { synth_play_arpeggio(1); snprintf(g_status_msg, sizeof(g_status_msg), "Melodi: 8-bit Arpeggio Riff!"); update_oscilloscope(); return; }
+            /* Presets - kun ved just_down */
+            if (t->just_down && input_hit_box(t, 54, 12, 12, 1)) { synth_play_preset(1); snprintf(g_status_msg, sizeof(g_status_msg), "Lydeffekt: Laser Blaster"); update_oscilloscope(); return; }
+            if (t->just_down && input_hit_box(t, 68, 12, 12, 1)) { synth_play_preset(2); snprintf(g_status_msg, sizeof(g_status_msg), "Lydeffekt: Retro Coin"); update_oscilloscope(); return; }
+            if (t->just_down && input_hit_box(t, 82, 12, 12, 1)) { synth_play_preset(3); snprintf(g_status_msg, sizeof(g_status_msg), "Lydeffekt: 8-bit Eksplosjon"); update_oscilloscope(); return; }
+            if (t->just_down && input_hit_box(t, 54, 14, 12, 1)) { synth_play_preset(4); snprintf(g_status_msg, sizeof(g_status_msg), "Lydeffekt: 1-UP Fanfare"); update_oscilloscope(); return; }
+            if (t->just_down && input_hit_box(t, 68, 14, 12, 1)) { synth_play_preset(5); snprintf(g_status_msg, sizeof(g_status_msg), "Lydeffekt: Chiptune Bass"); update_oscilloscope(); return; }
+            if (t->just_down && input_hit_box(t, 82, 14, 12, 1)) { synth_play_arpeggio(1); snprintf(g_status_msg, sizeof(g_status_msg), "Melodi: 8-bit Arpeggio Riff!"); update_oscilloscope(); return; }
 
             /* Oktav */
-            if (input_hit_box(t, 20, 17, 12, 1)) { g_current_octave = 3; return; }
-            if (input_hit_box(t, 34, 17, 12, 1)) { g_current_octave = 4; return; }
-            if (input_hit_box(t, 48, 17, 12, 1)) { g_current_octave = 5; return; }
+            if (t->just_down && input_hit_box(t, 12, 17, 8, 1)) { g_current_octave = 3; return; }
+            if (t->just_down && input_hit_box(t, 21, 17, 8, 1)) { g_current_octave = 4; return; }
+            if (t->just_down && input_hit_box(t, 30, 17, 8, 1)) { g_current_octave = 5; return; }
 
-            /* Piano Tangenter */
+            /* Volum */
+            if (t->just_down && input_hit_box(t, 51, 17, 5, 1)) { audio_volume_down(); return; }
+            if (t->just_down && input_hit_box(t, 57, 17, 5, 1)) { audio_volume_up(); return; }
+
+            /* Piano Tangenter: Spilles ved nytt trykk (just_down) ELLER nar fingeren glir til ny tangent */
             for (int i = 0; i < 13; i++) {
                 int kx = 4 + (i * 7);
                 if (input_hit_box(t, kx, 21, 6, 7)) {
-                    play_key(i);
+                    if (t->just_down || g_active_note != i) {
+                        play_key(i);
+                    }
                     return;
                 }
             }
@@ -337,69 +356,73 @@ static void synth_app_touch(const TouchEvent *t) {
     } else {
         /* Portrett */
         if (t->is_down) {
-            if (input_hit_box(t, 44, 1, 14, 1)) {
+            if (t->just_down && input_hit_box(t, 44, 1, 14, 1)) {
                 os_switch_app(&app_launcher);
                 return;
             }
 
             /* Kanaler */
-            if (input_hit_box(t, 4, 11, 24, 2)) {
+            if (t->just_down && input_hit_box(t, 4, 11, 24, 2)) {
                 s->pulse1.duty = (PulseDuty)((s->pulse1.duty + 1) % 4);
                 update_oscilloscope();
                 return;
             }
-            if (input_hit_box(t, 30, 11, 24, 2)) {
+            if (t->just_down && input_hit_box(t, 30, 11, 24, 2)) {
                 s->pulse2.enabled = !s->pulse2.enabled;
                 update_oscilloscope();
                 return;
             }
-            if (input_hit_box(t, 4, 13, 24, 2)) {
+            if (t->just_down && input_hit_box(t, 4, 13, 24, 2)) {
                 s->triangle.enabled = !s->triangle.enabled;
                 update_oscilloscope();
                 return;
             }
-            if (input_hit_box(t, 30, 13, 24, 2)) {
+            if (t->just_down && input_hit_box(t, 30, 13, 24, 2)) {
                 s->noise.enabled = !s->noise.enabled;
                 update_oscilloscope();
                 return;
             }
 
             /* Filter */
-            if (input_hit_box(t, 20, 17, 8, 1)) {
+            if (t->just_down && input_hit_box(t, 20, 17, 8, 1)) {
                 s->filter.cutoff -= 0.10f;
                 if (s->filter.cutoff < 0.10f) s->filter.cutoff = 0.10f;
                 update_oscilloscope();
                 return;
             }
-            if (input_hit_box(t, 30, 17, 8, 1)) {
+            if (t->just_down && input_hit_box(t, 30, 17, 8, 1)) {
                 s->filter.cutoff += 0.10f;
                 if (s->filter.cutoff > 1.0f) s->filter.cutoff = 1.0f;
                 update_oscilloscope();
                 return;
             }
-            if (input_hit_box(t, 40, 17, 16, 1)) {
+            if (t->just_down && input_hit_box(t, 40, 17, 16, 1)) {
                 s->filter.lpf_enabled = !s->filter.lpf_enabled;
                 update_oscilloscope();
                 return;
             }
 
             /* Presets */
-            if (input_hit_box(t, 4, 19, 11, 1)) { synth_play_preset(1); update_oscilloscope(); return; }
-            if (input_hit_box(t, 17, 19, 11, 1)) { synth_play_preset(2); update_oscilloscope(); return; }
-            if (input_hit_box(t, 30, 19, 11, 1)) { synth_play_preset(3); update_oscilloscope(); return; }
-            if (input_hit_box(t, 43, 19, 13, 1)) { synth_play_arpeggio(1); update_oscilloscope(); return; }
+            if (t->just_down && input_hit_box(t, 4, 19, 11, 1)) { synth_play_preset(1); update_oscilloscope(); return; }
+            if (t->just_down && input_hit_box(t, 17, 19, 11, 1)) { synth_play_preset(2); update_oscilloscope(); return; }
+            if (t->just_down && input_hit_box(t, 30, 19, 11, 1)) { synth_play_preset(3); update_oscilloscope(); return; }
+            if (t->just_down && input_hit_box(t, 43, 19, 13, 1)) { synth_play_arpeggio(1); update_oscilloscope(); return; }
 
-            /* Oktav */
-            if (input_hit_box(t, 14, 23, 11, 1)) { g_current_octave = 3; return; }
-            if (input_hit_box(t, 27, 23, 11, 1)) { g_current_octave = 4; return; }
-            if (input_hit_box(t, 40, 23, 11, 1)) { g_current_octave = 5; return; }
+            /* Oktav & Volum */
+            if (t->just_down && input_hit_box(t, 7, 23, 7, 1)) { g_current_octave = 3; return; }
+            if (t->just_down && input_hit_box(t, 15, 23, 7, 1)) { g_current_octave = 4; return; }
+            if (t->just_down && input_hit_box(t, 23, 23, 7, 1)) { g_current_octave = 5; return; }
+            if (t->just_down && input_hit_box(t, 43, 23, 7, 1)) { audio_volume_down(); return; }
+            if (t->just_down && input_hit_box(t, 51, 23, 7, 1)) { audio_volume_up(); return; }
 
             /* Tangenter portrett */
             for (int i = 0; i < 13; i++) {
                 int ky = 27 + (i / 7) * 10;
                 int kx = 3 + (i % 7) * 8;
                 if (input_hit_box(t, kx, ky, 7, 9)) {
-                    play_key(i);
+                    if (t->just_down || g_active_note != i) {
+                        play_key(i);
+                    }
                     return;
                 }
             }

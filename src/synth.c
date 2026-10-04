@@ -5,12 +5,13 @@
 #include <unistd.h>
 #include <fcntl.h>
 #include <math.h>
+#include <sys/wait.h>
 
 #include "synth.h"
 #include "audio.h"
 
 static SynthState g_synth;
-static const char *SYNTH_WAV_PATH = "/data/local/tmp/tabos_synth.wav";
+static const char *SYNTH_WAV_PATH = "/dev/tabos_synth.wav";
 
 void synth_init(void) {
     memset(&g_synth, 0, sizeof(g_synth));
@@ -251,7 +252,16 @@ void synth_render_wav(const char *path, float duration_sec, float pitch_start, f
     free(buf);
 }
 
+static pid_t g_last_audio_pid = -1;
+
 static void play_wav_async(const char *path) {
+    /* Stopp forrige tone umiddelbart slik at CPU ikke overbelastes og lyden ikke hakker */
+    if (g_last_audio_pid > 0) {
+        kill(g_last_audio_pid, SIGKILL);
+        waitpid(g_last_audio_pid, NULL, WNOHANG);
+        g_last_audio_pid = -1;
+    }
+
     pid_t pid = fork();
     if (pid == 0) {
         int devnull = open("/dev/null", O_RDWR);
@@ -262,6 +272,8 @@ static void play_wav_async(const char *path) {
         }
         execl("/system/bin/stagefright", "stagefright", "-a", "-o", path, (char *)NULL);
         _exit(0);
+    } else if (pid > 0) {
+        g_last_audio_pid = pid;
     }
 }
 

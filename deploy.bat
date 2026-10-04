@@ -1,6 +1,6 @@
 @echo off
 echo ============================================================
-echo   tabOS - Overforing og Kjøring på Allwinner A13 Nettbrett
+echo   tabOS - Overforing og Kjoring paa Allwinner A13 Nettbrett
 echo ============================================================
 
 where adb.exe >nul 2>nul
@@ -16,7 +16,7 @@ if not exist tabos_arm (
 )
 
 echo [*] Stopper eventuell kjorende tabOS-prosess...
-adb shell "pkill -9 tabos 2>/dev/null; true"
+adb shell "/system/bin/busybox killall -9 tabos 2>/dev/null; true"
 
 echo [*] Pusher tabos_arm til /data/local/tmp/tabos...
 adb push tabos_arm /data/local/tmp/tabos
