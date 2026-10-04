@@ -26,8 +26,10 @@ static void launcher_render_landscape(void) {
     display_clear(ANSI_BLACK);
 
     /* Topplinje / Status header */
+    char bat_str[32];
+    os_get_battery_str(bat_str, sizeof(bat_str));
     char top_buf[100];
-    snprintf(top_buf, sizeof(top_buf), "tabOS BBS TERMINAL v0.1          [ NODE 1 ONLINE ]          UPTIME: %us   BAT: 85%%", uptime_sec);
+    snprintf(top_buf, sizeof(top_buf), "tabOS BBS TERMINAL v0.1     [ NODE 1 ONLINE ]     UPTIME: %us   %s", uptime_sec, bat_str);
     display_draw_box(0, 0, 100, 3, "", ANSI_WHITE, ANSI_BLUE, ANSI_YELLOW);
     display_draw_string(2, 1, top_buf, ANSI_WHITE, ANSI_BLUE);
 
@@ -56,7 +58,7 @@ static void launcher_render_landscape(void) {
 
     /* Kolonne 3: Kontrollpanel & Grafikk */
     display_draw_box(68, 12, 28, 12, "KONTROLLPANEL", ANSI_WHITE, ANSI_BLACK, ANSI_LIGHT_MAGENTA);
-    display_draw_button(70, 14, 24, " [7] ROTER SKJERM ", ANSI_WHITE, ANSI_MAGENTA, (pressed_button_id == 7));
+    display_draw_button(70, 14, 24, " [7] STROM / BATTERI ", ANSI_WHITE, ANSI_MAGENTA, (pressed_button_id == 7));
     display_draw_button(70, 17, 24, " [8] ANSI FARGETEST", ANSI_WHITE, ANSI_MAGENTA, (pressed_button_id == 8));
     display_draw_button(70, 20, 24, " [X] NULLSTILL    ", ANSI_WHITE, ANSI_MAGENTA, (pressed_button_id == 9));
 
@@ -65,7 +67,7 @@ static void launcher_render_landscape(void) {
     char status_line[100];
     snprintf(status_line, sizeof(status_line), "STATUS: %s", status_msg);
     display_draw_string(2, 27, status_line, ANSI_YELLOW, ANSI_DARK_GRAY);
-    display_draw_string(2, 28, "TOUCH : Trykk [5] TASTATUR, [6] TOUCH-TEST, [8] FARGER eller [7] ROTER!", ANSI_LIGHT_CYAN, ANSI_DARK_GRAY);
+    display_draw_string(2, 28, "TOUCH : Trykk [5] TASTATUR, [6] TOUCH-TEST, [7] STROM eller [8] ANSI!", ANSI_LIGHT_CYAN, ANSI_DARK_GRAY);
 }
 
 static void launcher_render_portrait(void) {
@@ -75,8 +77,10 @@ static void launcher_render_portrait(void) {
     display_draw_box(0, 0, 60, 3, "", ANSI_WHITE, ANSI_BLUE, ANSI_YELLOW);
     display_draw_string(2, 1, "tabOS PORTRETT TERMINAL", ANSI_WHITE, ANSI_BLUE);
     char upt_buf[32];
-    snprintf(upt_buf, sizeof(upt_buf), "UPTIME: %us", uptime_sec);
-    display_draw_string(40, 1, upt_buf, ANSI_LIGHT_CYAN, ANSI_BLUE);
+    char bat_p_str[32];
+    os_get_battery_str(bat_p_str, sizeof(bat_p_str));
+    snprintf(upt_buf, sizeof(upt_buf), "%s", bat_p_str);
+    display_draw_string(36, 1, upt_buf, ANSI_LIGHT_CYAN, ANSI_BLUE);
 
     /* ASCII Banner */
     display_draw_string(15, 4, "  _        _      ___  ____  ", ANSI_YELLOW, ANSI_BLACK);
@@ -106,10 +110,10 @@ static void launcher_render_portrait(void) {
 
     /* Hurtignavigasjon nederst */
     display_draw_box(0, 38, 60, 11, "HURTIGNAVIGASJON", ANSI_WHITE, ANSI_BLACK, ANSI_LIGHT_GRAY);
-    display_draw_button(4, 41, 24, " [ ROTER SKJERM ] ", ANSI_WHITE, ANSI_BLUE, (pressed_button_id == 7));
-    display_draw_button(32, 41, 24, " [ RETRO SNAKE ] ", ANSI_WHITE, ANSI_GREEN, (pressed_button_id == 4));
-    display_draw_button(4, 45, 24, " [ TASTATUR ] ", ANSI_WHITE, ANSI_GREEN, (pressed_button_id == 5));
-    display_draw_button(32, 45, 24, " [ TOUCH-TEST ] ", ANSI_WHITE, ANSI_CYAN, (pressed_button_id == 6));
+    display_draw_button(4, 41, 24, " [ RETRO SNAKE ] ", ANSI_WHITE, ANSI_GREEN, (pressed_button_id == 4));
+    display_draw_button(32, 41, 24, " [ TASTATUR ] ", ANSI_WHITE, ANSI_GREEN, (pressed_button_id == 5));
+    display_draw_button(4, 45, 24, " [ TOUCH-TEST ] ", ANSI_WHITE, ANSI_CYAN, (pressed_button_id == 6));
+    display_draw_button(32, 45, 24, " [ ANSI-TEST ] ", ANSI_WHITE, ANSI_MAGENTA, (pressed_button_id == 8));
 }
 
 static void launcher_render(void) {
@@ -161,10 +165,12 @@ static void launcher_touch(const TouchEvent *t) {
                 case 6:
                     os_switch_app(&app_touchtest);
                     break;
-                case 7:
-                    os_toggle_orientation();
-                    snprintf(status_msg, sizeof(status_msg), "Skjerm rotert til PORTRETT!");
+                case 7: {
+                    char b_str[32];
+                    os_get_battery_str(b_str, sizeof(b_str));
+                    snprintf(status_msg, sizeof(status_msg), "%s (3.7V AXP209 PMIC)", b_str);
                     break;
+                }
                 case 8:
                     os_switch_app(&app_colortest);
                     break;
@@ -183,18 +189,15 @@ static void launcher_touch(const TouchEvent *t) {
             else if (input_hit_box(t, 5, 21, 50, 1))  pressed_button_id = 5;
             else if (input_hit_box(t, 5, 23, 50, 1))  pressed_button_id = 6;
             else if (input_hit_box(t, 5, 25, 50, 1))  pressed_button_id = 8;
-            else if (input_hit_box(t, 4, 41, 24, 1))  pressed_button_id = 7;
-            else if (input_hit_box(t, 32, 41, 24, 1)) pressed_button_id = 4;
-            else if (input_hit_box(t, 4, 45, 24, 1))  pressed_button_id = 5;
-            else if (input_hit_box(t, 32, 45, 24, 1)) pressed_button_id = 6;
+            else if (input_hit_box(t, 4, 41, 24, 1))  pressed_button_id = 4;
+            else if (input_hit_box(t, 32, 41, 24, 1)) pressed_button_id = 5;
+            else if (input_hit_box(t, 4, 45, 24, 1))  pressed_button_id = 6;
+            else if (input_hit_box(t, 32, 45, 24, 1)) pressed_button_id = 8;
         } else if (t->just_up) {
             int clicked = pressed_button_id;
             pressed_button_id = -1;
 
-            if (clicked == 7) {
-                os_toggle_orientation();
-                snprintf(status_msg, sizeof(status_msg), "Skjerm rotert til LANDSKAP!");
-            } else if (clicked == 1) {
+            if (clicked == 1) {
                 bbs_set_node(0);
                 os_switch_app(&app_bbs);
             } else if (clicked == 2) {

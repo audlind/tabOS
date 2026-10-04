@@ -672,6 +672,10 @@ static void bbs_render_portrait(void) {
     display_draw_button(24, 0, 16, "[BYTT BBS]", ANSI_WHITE, ANSI_MAGENTA, (pressed_key_id == 98));
     display_draw_button(43, 0, 16, "[X HOVEDMENY]", ANSI_WHITE, ANSI_RED, (pressed_key_id == 99));
 
+    char bat_p[32];
+    os_get_battery_str(bat_p, sizeof(bat_p));
+    display_draw_string(1, 1, bat_p, ANSI_LIGHT_CYAN, ANSI_BLUE);
+
     /* 2. Terminal Visningsvindu (Rad 2..33 = 32 rader x 60 kolonner) */
     for (int r = 0; r < 32; r++) {
         for (int c = 0; c < 60; c++) {
@@ -759,6 +763,13 @@ static void bbs_render_landscape(void) {
     
     display_draw_button(70, 0, 14, "[BYTT BBS]", ANSI_WHITE, ANSI_MAGENTA, (pressed_key_id == 98));
     display_draw_button(85, 0, 14, "[X HOVEDMENY]", ANSI_WHITE, ANSI_RED, (pressed_key_id == 99));
+
+    char bat_l[32];
+    os_get_battery_str(bat_l, sizeof(bat_l));
+    display_draw_string(2, 1, bat_l, ANSI_LIGHT_CYAN, ANSI_BLUE);
+    char tip_buf[80];
+    snprintf(tip_buf, sizeof(tip_buf), "TIPS: %s", BBS_NODES[current_node_idx].welcome_tip);
+    display_draw_string(22, 1, tip_buf, ANSI_LIGHT_GRAY, ANSI_BLUE);
 
     /* 2. Terminal Visningsvindu (Rad 2..20 = 19 rader x 100 kolonner) */
     for (int r = 0; r < 19; r++) {

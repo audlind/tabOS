@@ -192,14 +192,18 @@ static void snake_render(void) {
     display_draw_string(2, 1, "SNAKE", ANSI_YELLOW, ANSI_BLUE);
 
     char score_str[32];
-    snprintf(score_str, sizeof(score_str), "POENG: %3u", score);
-    display_draw_string(14, 1, score_str, ANSI_WHITE, ANSI_BLUE);
+    snprintf(score_str, sizeof(score_str), "P:%u", score);
+    display_draw_string(9, 1, score_str, ANSI_WHITE, ANSI_BLUE);
 
     char high_str[32];
-    snprintf(high_str, sizeof(high_str), "REKORD: %3u", high_score);
-    display_draw_string(29, 1, high_str, ANSI_LIGHT_GREEN, ANSI_BLUE);
+    snprintf(high_str, sizeof(high_str), "TOP:%u", high_score);
+    display_draw_string(17, 1, high_str, ANSI_LIGHT_GREEN, ANSI_BLUE);
 
-    display_draw_button(46, 1, 12, "[< MENY]", ANSI_WHITE, ANSI_RED, (active_pressed_btn == 99));
+    char bat_s[32];
+    os_get_battery_str(bat_s, sizeof(bat_s));
+    display_draw_string(26, 1, bat_s, ANSI_LIGHT_CYAN, ANSI_BLUE);
+
+    display_draw_button(47, 1, 11, "[< MENY]", ANSI_WHITE, ANSI_RED, (active_pressed_btn == 99));
 
     /* 2. Kvadratisk spillvindu (352x352 piksler nøyaktig!) */
     display_draw_box(BOARD_BOX_COL, BOARD_BOX_ROW, BOARD_BOX_W, BOARD_BOX_H,
@@ -284,7 +288,7 @@ static void snake_touch(const TouchEvent *t) {
         else if (input_hit_box(t, 22, 36, 16, 4)) active_pressed_btn = 5; /* START/PAUSE */
         else if (input_hit_box(t, 5, 46, 24, 3))  active_pressed_btn = 99;/* MENY */
         else if (input_hit_box(t, 31, 46, 24, 3)) active_pressed_btn = 88;/* NYTT */
-        else if (input_hit_box(t, 46, 1, 12, 1))  active_pressed_btn = 99;/* MENY TOPP */
+        else if (input_hit_box(t, 46, 1, 14, 1))  active_pressed_btn = 99;/* MENY TOPP */
 
         /* Direkte berøring i spillvinduet (rask retningsendring) */
         else if (input_hit_box(t, BOARD_BOX_COL + 1, BOARD_BOX_ROW + 1, BOARD_BOX_W - 2, BOARD_BOX_H - 2)) {

@@ -38,7 +38,10 @@ static void touchtest_render(void) {
 
     /* Header */
     display_draw_box(0, 0, w, 3, "", ANSI_WHITE, ANSI_GREEN, ANSI_YELLOW);
-    display_draw_string(2, 1, "TOUCH- OG TILT-SENSOR KALIBRERING", ANSI_WHITE, ANSI_GREEN);
+    display_draw_string(2, 1, "TOUCH & TILT KALIBRERING", ANSI_WHITE, ANSI_GREEN);
+    char bat_t[32];
+    os_get_battery_str(bat_t, sizeof(bat_t));
+    display_draw_string(orientation_is_landscape(orient) ? 42 : 27, 1, bat_t, ANSI_LIGHT_CYAN, ANSI_GREEN);
     display_draw_button(w - 18, 1, 16, " [< TILBAKE] ", ANSI_WHITE, ANSI_RED, false);
 
     /* HUD */
@@ -95,17 +98,15 @@ static void touchtest_render(void) {
     snprintf(swap_btn, sizeof(swap_btn), " [ AKSE: %s ] ", sensor_get_axis_swap() ? "SWAP" : "NORM");
 
     if (orientation_is_landscape(orient)) {
-        display_draw_button(4,  btn_y + 1, 18, " [< HOVEDMENY] ", ANSI_WHITE, ANSI_RED, false);
-        display_draw_button(24, btn_y + 1, 18, " [ TOM SKJERM ] ", ANSI_WHITE, ANSI_BROWN, false);
-        display_draw_button(44, btn_y + 1, 18, " [ ROTER MAN. ] ", ANSI_WHITE, ANSI_BLUE, false);
-        display_draw_button(64, btn_y + 1, 18, auto_btn, ANSI_WHITE, sensor_get_auto_rotate() ? ANSI_GREEN : ANSI_DARK_GRAY, false);
-        display_draw_button(84, btn_y + 1, 14, swap_btn, ANSI_WHITE, ANSI_MAGENTA, false);
+        display_draw_button(4,  btn_y + 1, 20, " [< HOVEDMENY] ", ANSI_WHITE, ANSI_RED, false);
+        display_draw_button(27, btn_y + 1, 20, " [ TOM SKJERM ] ", ANSI_WHITE, ANSI_BROWN, false);
+        display_draw_button(50, btn_y + 1, 24, auto_btn, ANSI_WHITE, sensor_get_auto_rotate() ? ANSI_GREEN : ANSI_DARK_GRAY, false);
+        display_draw_button(77, btn_y + 1, 20, swap_btn, ANSI_WHITE, ANSI_MAGENTA, false);
     } else {
-        display_draw_button(4,  btn_y + 1, 24, " [< HOVEDMENY] ", ANSI_WHITE, ANSI_RED, false);
-        display_draw_button(32, btn_y + 1, 24, " [ TOM SKJERM ] ", ANSI_WHITE, ANSI_BROWN, false);
-        display_draw_button(4,  btn_y + 4, 16, " [ ROTER ] ", ANSI_WHITE, ANSI_BLUE, false);
-        display_draw_button(22, btn_y + 4, 20, auto_btn, ANSI_WHITE, sensor_get_auto_rotate() ? ANSI_GREEN : ANSI_DARK_GRAY, false);
-        display_draw_button(44, btn_y + 4, 14, swap_btn, ANSI_WHITE, ANSI_MAGENTA, false);
+        display_draw_button(4,  btn_y + 1, 25, " [< HOVEDMENY] ", ANSI_WHITE, ANSI_RED, false);
+        display_draw_button(31, btn_y + 1, 25, " [ TOM SKJERM ] ", ANSI_WHITE, ANSI_BROWN, false);
+        display_draw_button(4,  btn_y + 4, 25, auto_btn, ANSI_WHITE, sensor_get_auto_rotate() ? ANSI_GREEN : ANSI_DARK_GRAY, false);
+        display_draw_button(31, btn_y + 4, 25, swap_btn, ANSI_WHITE, ANSI_MAGENTA, false);
     }
 }
 
@@ -140,29 +141,25 @@ static void touchtest_touch(const TouchEvent *t) {
         if (input_hit_box(t, w - 18, 1, 16, 1)) {
             os_switch_app(&app_launcher);
         } else if (orientation_is_landscape(orient)) {
-            if (input_hit_box(t, 4, btn_y + 1, 18, 1)) {
+            if (input_hit_box(t, 4, btn_y + 1, 20, 1)) {
                 os_switch_app(&app_launcher);
-            } else if (input_hit_box(t, 24, btn_y + 1, 18, 1)) {
+            } else if (input_hit_box(t, 27, btn_y + 1, 20, 1)) {
                 point_count = 0;
                 total_touches = 0;
-            } else if (input_hit_box(t, 44, btn_y + 1, 18, 1)) {
-                os_toggle_orientation();
-            } else if (input_hit_box(t, 64, btn_y + 1, 18, 1)) {
+            } else if (input_hit_box(t, 50, btn_y + 1, 24, 1)) {
                 sensor_toggle_auto_rotate();
-            } else if (input_hit_box(t, 84, btn_y + 1, 14, 1)) {
+            } else if (input_hit_box(t, 77, btn_y + 1, 20, 1)) {
                 sensor_set_axis_swap(!sensor_get_axis_swap());
             }
         } else {
-            if (input_hit_box(t, 4, btn_y + 1, 24, 1)) {
+            if (input_hit_box(t, 4, btn_y + 1, 25, 1)) {
                 os_switch_app(&app_launcher);
-            } else if (input_hit_box(t, 32, btn_y + 1, 24, 1)) {
+            } else if (input_hit_box(t, 31, btn_y + 1, 25, 1)) {
                 point_count = 0;
                 total_touches = 0;
-            } else if (input_hit_box(t, 4, btn_y + 4, 16, 1)) {
-                os_toggle_orientation();
-            } else if (input_hit_box(t, 22, btn_y + 4, 20, 1)) {
+            } else if (input_hit_box(t, 4, btn_y + 4, 25, 1)) {
                 sensor_toggle_auto_rotate();
-            } else if (input_hit_box(t, 44, btn_y + 4, 14, 1)) {
+            } else if (input_hit_box(t, 31, btn_y + 4, 25, 1)) {
                 sensor_set_axis_swap(!sensor_get_axis_swap());
             }
         }

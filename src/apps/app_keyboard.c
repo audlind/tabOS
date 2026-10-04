@@ -45,7 +45,10 @@ static void keyboard_render_portrait(void) {
 
     /* Header */
     display_draw_box(0, 0, 60, 3, "", ANSI_WHITE, ANSI_BLUE, ANSI_YELLOW);
-    display_draw_string(2, 1, "TOUCH-TASTATUR (STORE TASTER)", ANSI_WHITE, ANSI_BLUE);
+    display_draw_string(2, 1, "TASTATUR", ANSI_WHITE, ANSI_BLUE);
+    char bat_p[32];
+    os_get_battery_str(bat_p, sizeof(bat_p));
+    display_draw_string(14, 1, bat_p, ANSI_LIGHT_CYAN, ANSI_BLUE);
     display_draw_button(42, 1, 16, " [< TILBAKE] ", ANSI_WHITE, ANSI_RED, false);
 
     /* Notat-tekstboks */
@@ -92,8 +95,7 @@ static void keyboard_render_portrait(void) {
     draw_big_key_c(45, 25, 10, kh, "TOM", false, ANSI_WHITE, ANSI_MAGENTA);
 
     /* Kontrollknapper rad 30 */
-    display_draw_button(5, 30, 24, " [< TILBAKE] ", ANSI_WHITE, ANSI_RED, false);
-    display_draw_button(31, 30, 24, " [ ROTER SKJERM ] ", ANSI_WHITE, ANSI_BLUE, false);
+    display_draw_button(5, 30, 50, " [< TILBAKE TIL HOVEDMENY] ", ANSI_WHITE, ANSI_RED, false);
 
     /* Statusinfo */
     display_draw_box(2, 34, 56, 14, "TASTE-INFO", ANSI_WHITE, ANSI_BLACK, ANSI_LIGHT_GREEN);
@@ -107,6 +109,9 @@ static void keyboard_render_landscape(void) {
     /* Header */
     display_draw_box(0, 0, 100, 3, "", ANSI_WHITE, ANSI_BLUE, ANSI_YELLOW);
     display_draw_string(2, 1, "TOUCH-TASTATUR (STORE TASTER - LANDSKAP)", ANSI_WHITE, ANSI_BLUE);
+    char bat_l[32];
+    os_get_battery_str(bat_l, sizeof(bat_l));
+    display_draw_string(52, 1, bat_l, ANSI_LIGHT_CYAN, ANSI_BLUE);
     display_draw_button(82, 1, 16, " [< TILBAKE] ", ANSI_WHITE, ANSI_RED, false);
 
     /* Tekstvisning */
@@ -148,10 +153,9 @@ static void keyboard_render_landscape(void) {
 
     /* Rad 5: Kontrolltaster på rad 23 */
     draw_big_key_c(8, 23, 14, kh, "SLETT", false, ANSI_WHITE, ANSI_RED);
-    draw_big_key_c(24, 23, 30, kh, "MELLOMROM", false, ANSI_WHITE, ANSI_BLUE);
-    draw_big_key_c(56, 23, 10, kh, "TOM", false, ANSI_WHITE, ANSI_MAGENTA);
-    draw_big_key_c(68, 23, 11, kh, "ROTER", false, ANSI_WHITE, ANSI_CYAN);
-    draw_big_key_c(81, 23, 11, kh, "TILBAKE", false, ANSI_WHITE, ANSI_RED);
+    draw_big_key_c(24, 23, 38, kh, "MELLOMROM", false, ANSI_WHITE, ANSI_BLUE);
+    draw_big_key_c(64, 23, 12, kh, "TOM", false, ANSI_WHITE, ANSI_MAGENTA);
+    draw_big_key_c(78, 23, 14, kh, "TILBAKE", false, ANSI_WHITE, ANSI_RED);
 
     /* Hjelpelinje nederst */
     display_draw_string(8, 27, "> Trykk pa tastene for a skrive! [\x92] [\x9D] [\x8F] er inkludert.", ANSI_LIGHT_GREEN, ANSI_BLACK);
@@ -246,12 +250,8 @@ static void keyboard_touch(const TouchEvent *t) {
             input_buffer[0] = '\0';
             return;
         }
-        if (input_hit_box(t, 5, 30, 24, 1)) {
+        if (input_hit_box(t, 5, 30, 50, 1)) {
             os_switch_app(&app_launcher);
-            return;
-        }
-        if (input_hit_box(t, 31, 30, 24, 1)) {
-            os_toggle_orientation();
             return;
         }
     } else {
@@ -317,7 +317,7 @@ static void keyboard_touch(const TouchEvent *t) {
             if (len > 0) input_buffer[len - 1] = '\0';
             return;
         }
-        if (input_hit_box(t, 24, 23, 30, kh)) { /* MELLOMROM */
+        if (input_hit_box(t, 24, 23, 38, kh)) { /* MELLOMROM */
             int len = (int)strlen(input_buffer);
             if (len < MAX_TEXT_LEN - 1) {
                 input_buffer[len] = ' ';
@@ -325,15 +325,11 @@ static void keyboard_touch(const TouchEvent *t) {
             }
             return;
         }
-        if (input_hit_box(t, 56, 23, 10, kh)) { /* TOM */
+        if (input_hit_box(t, 64, 23, 12, kh)) { /* TOM */
             input_buffer[0] = '\0';
             return;
         }
-        if (input_hit_box(t, 68, 23, 11, kh)) { /* ROTER */
-            os_toggle_orientation();
-            return;
-        }
-        if (input_hit_box(t, 81, 23, 11, kh)) { /* TILBAKE */
+        if (input_hit_box(t, 78, 23, 14, kh)) { /* TILBAKE */
             os_switch_app(&app_launcher);
             return;
         }

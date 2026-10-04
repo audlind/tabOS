@@ -28,6 +28,11 @@ void os_set_orientation(ScreenOrientation orientation);
 /* Kjører én komplett system-syklus (input, update, render, flush) */
 void os_step(int touch_raw_x, int touch_raw_y, bool is_touch_down, uint32_t delta_ms);
 
+/* Strøm- og Batteri-telemetri */
+int os_get_battery_level(void);
+bool os_is_charging(void);
+void os_get_battery_str(char *buf, size_t buf_size);
+
 /* Innebygde kjerneapper */
 extern App app_launcher;
 extern App app_colortest;

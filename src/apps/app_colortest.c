@@ -78,9 +78,11 @@ static void colortest_render_landscape(void) {
     }
 
     /* Bunnmeny */
+    char bat_str[32];
+    os_get_battery_str(bat_str, sizeof(bat_str));
     display_draw_box(0, 26, 100, 4, "", ANSI_WHITE, ANSI_DARK_GRAY, ANSI_LIGHT_GRAY);
     display_draw_button(4, 27, 20, " [< TILBAKE] ", ANSI_WHITE, ANSI_RED, false);
-    display_draw_button(28, 27, 20, " [ ROTER SKJERM ] ", ANSI_WHITE, ANSI_BLUE, false);
+    display_draw_string(28, 27, bat_str, ANSI_YELLOW, ANSI_DARK_GRAY);
     display_draw_string(52, 27, "Allwinner A13 32-bit ARGB TrueColor Framebuffer OK", ANSI_LIGHT_CYAN, ANSI_DARK_GRAY);
     display_draw_string(52, 28, "16 ANSI-farger m/ IBM CP437 standard VGA font", ANSI_LIGHT_GREEN, ANSI_DARK_GRAY);
 }
@@ -110,9 +112,11 @@ static void colortest_render_portrait(void) {
     display_draw_string(4, 19, "Skygge: \xB0\xB0\xB1\xB1\xB2\xB2\xDB\xDB (0% -> 100%)", ANSI_LIGHT_GREEN, ANSI_BLACK);
     display_draw_string(4, 20, "Symbol: \x03 \x04 \x05 \x06 \x01 \x02 \x0D \x0E \x18 \x19 \x1A \x1B \xF1 \xF7", ANSI_LIGHT_MAGENTA, ANSI_BLACK);
 
+    char bat_p[32];
+    os_get_battery_str(bat_p, sizeof(bat_p));
     display_draw_box(0, 40, 60, 9, "KONTROLL", ANSI_WHITE, ANSI_BLACK, ANSI_LIGHT_GRAY);
     display_draw_button(4, 43, 24, " [< TILBAKE] ", ANSI_WHITE, ANSI_RED, false);
-    display_draw_button(32, 43, 24, " [ ROTER SKJERM ] ", ANSI_WHITE, ANSI_BLUE, false);
+    display_draw_string(32, 43, bat_p, ANSI_YELLOW, ANSI_BLACK);
 }
 
 static void colortest_render(void) {
@@ -128,14 +132,10 @@ static void colortest_touch(const TouchEvent *t) {
         if (orientation_is_landscape(display_get_orientation())) {
             if (input_hit_box(t, 82, 1, 16, 1) || input_hit_box(t, 4, 27, 20, 1)) {
                 os_switch_app(&app_launcher);
-            } else if (input_hit_box(t, 28, 27, 20, 1)) {
-                os_toggle_orientation();
             }
         } else {
             if (input_hit_box(t, 42, 1, 16, 1) || input_hit_box(t, 4, 43, 24, 1)) {
                 os_switch_app(&app_launcher);
-            } else if (input_hit_box(t, 32, 43, 24, 1)) {
-                os_toggle_orientation();
             }
         }
     }

@@ -149,17 +149,17 @@ bool sensor_check_tilt(ScreenOrientation current_orient, ScreenOrientation *new_
 
     /* Sjekk om portrett- eller landskapsaksen dominerer */
     if (mag_y > mag_x + HYSTERESIS_THRESHOLD) {
-        /* Portrett dominerer: Skille mellom 90 grader og 270 grader */
-        detected = (eff_y > 0) ? ORIENTATION_PORTRAIT : ORIENTATION_PORTRAIT_INVERTED;
+        /* Portrett dominerer: Invertert polaritet for korrekt vei opp */
+        detected = (eff_y > 0) ? ORIENTATION_PORTRAIT_INVERTED : ORIENTATION_PORTRAIT;
     } else if (mag_x > mag_y + HYSTERESIS_THRESHOLD) {
         /* Landskap dominerer: Skille mellom 0 grader (normal) og 180 grader (opp-ned) */
         detected = (eff_x > 0) ? ORIENTATION_LANDSCAPE : ORIENTATION_LANDSCAPE_INVERTED;
     } else if (orientation_is_portrait(current_orient)) {
         /* Allerede i portrett: bytt kun til motsatt portrett hvis motsatt side er markant */
-        if (current_orient == ORIENTATION_PORTRAIT && eff_y < -HYSTERESIS_THRESHOLD) {
-            detected = ORIENTATION_PORTRAIT_INVERTED;
-        } else if (current_orient == ORIENTATION_PORTRAIT_INVERTED && eff_y > HYSTERESIS_THRESHOLD) {
+        if (current_orient == ORIENTATION_PORTRAIT_INVERTED && eff_y < -HYSTERESIS_THRESHOLD) {
             detected = ORIENTATION_PORTRAIT;
+        } else if (current_orient == ORIENTATION_PORTRAIT && eff_y > HYSTERESIS_THRESHOLD) {
+            detected = ORIENTATION_PORTRAIT_INVERTED;
         }
     } else if (orientation_is_landscape(current_orient)) {
         /* Allerede i landskap: bytt kun til motsatt landskap hvis motsatt side er markant */

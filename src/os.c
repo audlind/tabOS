@@ -1,4 +1,6 @@
 #include <stddef.h>
+#include <stdio.h>
+#include <string.h>
 #include "os.h"
 
 static App *registered_apps[MAX_APPS];
@@ -74,4 +76,62 @@ void os_step(int touch_raw_x, int touch_raw_y, bool is_touch_down, uint32_t delt
     }
 
     display_render_frame();
+}
+
+int os_get_battery_level(void) {
+    int cap = 100;
+    FILE *f = fopen("/sys/class/power_supply/battery/capacity", "r");
+    if (f) {
+        if (fscanf(f, "%d", &cap) != 1) {
+            cap = 100;
+        }
+        fclose(f);
+    }
+    return cap;
+}
+
+bool os_is_charging(void) {
+    /* 1. Sjekk USB online */
+    FILE *f_usb = fopen("/sys/class/power_supply/usb/online", "r");
+    if (f_usb) {
+        int val = 0;
+        if (fscanf(f_usb, "%d", &val) == 1 && val > 0) {
+            fclose(f_usb);
+            return true;
+        }
+        fclose(f_usb);
+    }
+
+    /* 2. Sjekk AC adapter online */
+    FILE *f_ac = fopen("/sys/class/power_supply/ac/online", "r");
+    if (f_ac) {
+        int val = 0;
+        if (fscanf(f_ac, "%d", &val) == 1 && val > 0) {
+            fclose(f_ac);
+            return true;
+        }
+        fclose(f_ac);
+    }
+
+    /* 3. Sjekk batteristatus (Charging / Full) */
+    FILE *f_stat = fopen("/sys/class/power_supply/battery/status", "r");
+    if (f_stat) {
+        char status[32] = {0};
+        if (fscanf(f_stat, "%31s", status) == 1) {
+            if (strstr(status, "Charg") || strstr(status, "Full")) {
+                fclose(f_stat);
+                return true;
+            }
+        }
+        fclose(f_stat);
+    }
+
+    return false;
+}
+
+void os_get_battery_str(char *buf, size_t buf_size) {
+    if (!buf || buf_size == 0) return;
+    int lvl = os_get_battery_level();
+    bool chg = os_is_charging();
+    snprintf(buf, buf_size, "BAT: %d%% [%s]", lvl, chg ? "LADER" : "BAT");
 }
