@@ -29,12 +29,14 @@ echo [*] Kompilerer tabOS kjerne og alle applikasjoner...
     src/input.c ^
     src/sensor.c ^
     src/audio.c ^
+    src/power.c ^
     src/apps/app_launcher.c ^
     src/apps/app_bbs.c ^
     src/apps/app_snake.c ^
     src/apps/app_keyboard.c ^
     src/apps/app_touchtest.c ^
     src/apps/app_colortest.c ^
+    src/apps/app_settings.c ^
     -o tabos_arm
 
 if %errorlevel% neq 0 (

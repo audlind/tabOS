@@ -40,6 +40,7 @@ extern App app_touchtest;
 extern App app_keyboard;
 extern App app_snake;
 extern App app_bbs;
+extern App app_settings;
 void bbs_set_node(int node_idx);
 
 #endif /* OS_H */

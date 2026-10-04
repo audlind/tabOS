@@ -45,6 +45,12 @@ Dette dokumentet inneholder all teknisk informasjon, registeradresser, maskinvar
 * **Minnekartlegging (mmap):**
   * Direkte `mmap()` med `PROT_READ | PROT_WRITE` og `MAP_SHARED`
   * 0 kopier, 0 latency, direkte skriving til LCD-driverbrikkens minne
+* **Bakgrunnsbelysning (Hardware PWM Backlight via `/dev/disp`):**
+  * På Allwinner sun5i finnes det ingen standard `/sys/class/backlight`-node.
+  * Belysningen styres direkte via Display Engine-karakterenheten `/dev/disp`:
+    * `DISP_CMD_LCD_SET_BRIGHTNESS` = `0x142`: Setter lysstyrke ($0 \dots 255$).
+    * `DISP_CMD_LCD_GET_BRIGHTNESS` = `0x143`: Leser av aktiv maskinvarelysstyrke.
+  * tabOS implementerer direkte maskinvarestyring i `power.c` uten eksterne verktøy.
 * **GPU:** ARM Mali-400 MP1 (støtter OpenGL ES 2.0 / 1.1)
 
 ---
@@ -99,17 +105,43 @@ Dette dokumentet inneholder all teknisk informasjon, registeradresser, maskinvar
 
 ---
 
-## 7. Strømstyring (PMIC) og Batteri
+## 7. Strømstyring (PMIC), DVFS og Batteri
 
 * **PMIC (Power Management IC):** X-Powers AXP209
-  * Koblet over I2C-buss til SoC
-  * Styrer DC-DC konvertere, LDO-spenninger til CPU-kjerne, VDD-SYS, VDD-DLL og skjerm
-  * Innebygd 12-bit ADC for spenning, strømtrekk og temperatur
-* **Batteri:** 3.7V Li-Po (2500–3000 mAh)
-* **Telemetrinoder i Linux:**
-  * `/sys/class/power_supply/battery/capacity`: Prosentandel (0–100%)
-  * `/sys/class/power_supply/battery/voltage_now`: Millivolt
-  * `/sys/class/power_supply/battery/status`: Lader / Utlader / Full
+  * Koblet over I2C-buss til SoC (`twi0`, adresse `0x34`).
+  * Styrer DC-DC konvertere og LDO-regulatorer:
+    * DCDC2: VDD-CPU (dynamisk skalering $1.0\text{V} \dots 1.4\text{V}$ avhengig av kjernefrekvens)
+    * DCDC3: VDD-INT / VDD-SYS ($1.2\text{V}$)
+    * LDO3: VDD-DLL ($1.2\text{V}$)
+    * LDO4: VDD-IP / AVDD ($3.0\text{V}$)
+  * Innebygd 12-bit ADC for spennings-, strøm- og temperaturmåling.
+* **Batteri:** 3.7V Li-Po (1-celle, 2500–3000 mAh)
+* **Telemetrinoder i Linux (`/sys/class/power_supply/battery/`):**
+  * `voltage_now`: Nåværende batterispenning i mikrovolt ($\mu\text{V}$), f.eks. $4193000 = 4.193\text{V}$.
+  * `current_now`: Ladestrøm (+) eller forbruksstrøm (-) i mikroampere ($\mu\text{A}$).
+  * `temp`: Batteritemperatur (tiendedels grader Celsius).
+  * `status`: `Charging`, `Discharging`, `Full` eller `Not charging`.
+  * `capacity`: AXP209 intern coulomb-teller / hardware estimator.
+* **Årsak til batteri-hopp og tabOS Smart OCV-løsning:**
+  * Den interne coulomb-telleren i AXP209 mister synkroniseringen når Android sitt batterirammeverk stoppes, noe som fører til at `capacity`-registeret hopper ulineært (f.eks. fra 0% rett til 88%).
+  * tabOS løser dette ved å implementere en egen kjemisk Open-Circuit Voltage (OCV) kurve for 1S Li-Po batterier kombinert med et eksponensielt glattingsfilter (EMA) for å fjerne spenningsfall under CPU-last:
+    * $\ge 4180\text{ mV} \to 100\%$
+    * $4100\text{ mV} \to 90\%$
+    * $4000\text{ mV} \to 75\%$
+    * $3900\text{ mV} \to 60\%$
+    * $3800\text{ mV} \to 42\%$
+    * $3700\text{ mV} \to 22\%$
+    * $3600\text{ mV} \to 10\%$
+    * $3500\text{ mV} \to 3\%$
+    * $< 3400\text{ mV} \to 0\%$ (kritisk avstengingsgrense)
+
+### 7.1 Dynamisk Frekvens- og Spenningsstyring (CPU DVFS)
+Allwinner A13 Cortex-A8 støtter dynamisk klokking:
+* **Frekvenstrinn:** 60 MHz, 144 MHz, 300 MHz, 384 MHz, 528 MHz, 600 MHz, 720 MHz, 864 MHz, 1008 MHz.
+* **Strømoptimalisering:**
+  * Tidligere kjørte nettbrettet med `performance`-governor låst til 1008 MHz @ 1.4V konstant, noe som tappet batteriet raskt og varmet opp brikkesettet.
+  * tabOS konfigurerer automatisk `ondemand`-governor ved oppstart. CPU-kjernen klokker ned til **60 MHz** ved tomgang (over 94% frekvensreduksjon og dramatisk strømsparing), og skalerer opp til 1008 MHz på millisekundet når berøringsskjermen brukes.
+  * Brukeren kan også velge `powersave`, `fantasy` eller `performance` direkte fra Innstillinger-menyen.
 
 ---
 

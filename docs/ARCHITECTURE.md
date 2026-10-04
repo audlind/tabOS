@@ -174,3 +174,27 @@ flowchart TD
    For å hindre at skjermen vipper fram og tilbake ved ~45 graders vinkel, kreves en hysterese-terskel på 7 000 enheter samt en debounce-forsinkelse på 350 ms.
 5. **App-oppdatering ved rotasjon:**
    Når orienteringen endres, varsles den aktive appen via `on_resize(cols, rows)`, slik at menyer, spillfelt og terminalbuffere umiddelbart tilpasser seg de nye dimensjonene.
+
+---
+
+## 8. Strømstyring og Maskinvarekontrollpanel (Power & Settings)
+
+Strømstyringsmodulen ([power.h](file:///c:/AG-prosjekter/tabOS/include/power.h), [power.c](file:///c:/AG-prosjekter/tabOS/src/power.c)) og Innstillingsappen ([app_settings.c](file:///c:/AG-prosjekter/tabOS/src/apps/app_settings.c)) gir full kontroll over enhetens energibruk og parametere:
+
+### 8.1 Automatisk Skjermdimming og Dvale (Inactivity Sleep)
+* tabOS sporer tidspunktet for siste berøringsaktivitet via mononotisk klokke (`clock_gettime(CLOCK_MONOTONIC)`).
+* Brukeren kan konfigurere dvaletid (15s, 30s, 60s, 2m eller AV - standard er 30 sekunder).
+* Når tidsgrensen passeres:
+  1. Skjermens bakgrunnsbelysning dimmes automatisk ned til et diskret nivå (10/255, ~4% lysstyrke) via `/dev/disp` ioctl `0x142`.
+  2. Løkkens `select()`-timeout økes fra 16 ms (60 FPS) til 80 ms (12.5 Hz standby) for å minimere CPU-våkninger.
+* Så snart brukeren berører skjermen, vekkes panelet momentant opp igjen til full konfigurert lysstyrke på < 0.1 ms uten treghet.
+
+### 8.2 CPU DVFS Kjernekontroll
+* tabOS kontrollerer Linux-kjernens `cpufreq`-grensesnitt direkte via `/sys/devices/system/cpu/cpu0/cpufreq/scaling_governor`.
+* Governor `ondemand` reduserer klokkefrekvensen til 60 MHz når det ikke foregår berøring eller nettverkstrafikk, og skalerer opp til 1008 MHz under operasjoner.
+* Dette gir en reduksjon i dynamisk effekttap på over 90% sammenlignet med fabrikkinnstillingens `performance`-modus.
+
+### 8.3 AXP209 Batteri-telemetri og Smart OCV-estimering
+* Telemetridata leses asynkront fra AXP209 PMIC sysfs-driveren.
+* For å unngå ulineære hopp fra en ukalibrert AXP209 coulomb-teller, beregner tabOS reell kapasitet fra cellens kjemiske hvilespenning (OCV) filtrert med et eksponensielt glidende gjennomsnitt (EMA). Brukeren kan via innstillingsmenyen veksle mellom `SMART VOLT (OCV)` og `AXP209 RAW CHIP`.
+

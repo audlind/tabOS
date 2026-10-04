@@ -15,6 +15,7 @@
 #include "os.h"
 #include "audio.h"
 #include "sensor.h"
+#include "power.h"
 
 static volatile bool keep_running = true;
 
@@ -70,15 +71,17 @@ int main(int argc, char **argv) {
         close(wl);
     }
 
-    /* 3. Initialiser tabOS kjernen og registrer alle apper */
+    /* 3. Initialiser tabOS kjernen, strømstyring og registrer alle apper */
     os_init(fb, ORIENTATION_LANDSCAPE);
     audio_init();
+    power_init();
     os_register_app(&app_launcher);
     os_register_app(&app_keyboard);
     os_register_app(&app_touchtest);
     os_register_app(&app_colortest);
     os_register_app(&app_snake);
     os_register_app(&app_bbs);
+    os_register_app(&app_settings);
     os_switch_app(&app_launcher);
 
     /* Første skjermoppdatering */
@@ -115,7 +118,7 @@ int main(int argc, char **argv) {
 
         struct timeval tv;
         tv.tv_sec = 0;
-        tv.tv_usec = 10000; /* 10 ms timeout = 100 Hz polling rate */
+        tv.tv_usec = power_is_dimmed() ? 80000 : 15000; /* 80ms ved dvale (12.5Hz), 15ms ved aktiv bruk (66Hz) */
 
         int ret = select(max_fd + 1, &read_fds, NULL, NULL, &tv);
         if (ret > 0) {
@@ -128,6 +131,11 @@ int main(int argc, char **argv) {
             if (FD_ISSET(touch_fd, &read_fds)) {
                 ssize_t bytes = read(touch_fd, ev, sizeof(ev));
                 if (bytes > 0) {
+                    /* Berøring registrert: Nullstill dvaletimer og vekk skjerm hvis dimmet */
+                    if (power_notify_activity()) {
+                        dirty = true;
+                    }
+
                     int count = (int)(bytes / sizeof(struct input_event));
                     for (int i = 0; i < count; i++) {
                         if (ev[i].type == EV_ABS) {
@@ -165,6 +173,11 @@ int main(int argc, char **argv) {
         if (elapsed_ms >= 10) {
             last_time = now_time;
 
+            /* Oppdater strømstyring & auto-dvaletimer */
+            if (power_update((uint32_t)elapsed_ms)) {
+                dirty = true;
+            }
+
             /* Sjekk akselerometer for automatisk tilting / rotasjon */
             ScreenOrientation cur_orient = display_get_orientation();
             ScreenOrientation new_orient = cur_orient;
@@ -201,6 +214,7 @@ int main(int argc, char **argv) {
     }
 
     printf("\n[*] Avslutter tabOS Native...\n");
+    power_close();
     if (sensor_fd >= 0) close(sensor_fd);
     munmap(fb, fb_size);
     close(fb_fd);
