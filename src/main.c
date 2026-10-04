@@ -48,7 +48,7 @@ int main(int argc, char **argv) {
     }
     printf("[*] LCD Framebuffer mmap OK (%dx%d 32-bit ARGB)\n", SCREEN_PHYS_WIDTH, SCREEN_PHYS_HEIGHT);
 
-    /* 2. Åpne Zet6221 touch-kontroller (/dev/input/event2) */
+    /* 2. Åpne Zet6221 touch-kontroller (/dev/input/event2) og Power-tast (/dev/input/event1) */
     int touch_fd = open("/dev/input/event2", O_RDONLY | O_NONBLOCK);
     if (touch_fd < 0) {
         perror("Feil ved åpning av /dev/input/event2");
@@ -57,6 +57,7 @@ int main(int argc, char **argv) {
         return 1;
     }
     printf("[*] Zet6221 I2C Touch-driver koblet til (/dev/input/event2)\n");
+    int pwr_fd = open("/dev/input/event1", O_RDONLY | O_NONBLOCK);
     int sensor_fd = sensor_init();
 
     signal(SIGINT, sig_handler);
@@ -112,6 +113,10 @@ int main(int argc, char **argv) {
         FD_ZERO(&read_fds);
         FD_SET(touch_fd, &read_fds);
         int max_fd = touch_fd;
+        if (pwr_fd >= 0) {
+            FD_SET(pwr_fd, &read_fds);
+            if (pwr_fd > max_fd) max_fd = pwr_fd;
+        }
         if (sensor_fd >= 0) {
             FD_SET(sensor_fd, &read_fds);
             if (sensor_fd > max_fd) max_fd = sensor_fd;
@@ -123,6 +128,16 @@ int main(int argc, char **argv) {
 
         int ret = select(max_fd + 1, &read_fds, NULL, NULL, &tv);
         if (ret > 0) {
+            /* Fysisk Power-knapp på brettet */
+            if (pwr_fd >= 0 && FD_ISSET(pwr_fd, &read_fds)) {
+                struct input_event pev[8];
+                ssize_t pb = read(pwr_fd, pev, sizeof(pev));
+                if (pb > 0) {
+                    power_notify_activity();
+                    power_set_brightness(190);
+                    dirty = true;
+                }
+            }
             /* Prosesser akselerometer-hendelser */
             if (sensor_fd >= 0 && FD_ISSET(sensor_fd, &read_fds)) {
                 sensor_process_events(sensor_fd);

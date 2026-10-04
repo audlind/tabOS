@@ -8,16 +8,17 @@
 #include "power.h"
 
 /* Allwinner display driver ioctls for sun5i */
+#define DISP_CMD_LCD_ON 0x140
 #define DISP_CMD_LCD_SET_BRIGHTNESS 0x142
 #define DISP_CMD_LCD_GET_BRIGHTNESS 0x143
 
 static int disp_fd = -1;
-static int current_brightness = 130;  /* Standard ca 50% */
-static int saved_brightness = 130;
+static int current_brightness = 190;  /* Standard ca 75% */
+static int saved_brightness = 190;
 static bool is_dimmed = false;
 
 /* Dvale-konfigurasjon */
-static uint32_t sleep_timeout_sec = 30; /* Standard 30 sekunder inaktivitet */
+static uint32_t sleep_timeout_sec = 0; /* Standard AV: Skjermen forblir trygt paa til brukeren eventuelt aktiverer dvale */
 static uint32_t inactivity_accum_ms = 0;
 
 /* Batteri-konfigurasjon */
@@ -29,17 +30,15 @@ void power_init(void) {
         disp_fd = open("/dev/disp", O_RDWR);
     }
 
-    /* Les gjeldende lysstyrke fra maskinvaren */
     if (disp_fd >= 0) {
-        unsigned long args[4] = {0, 0, 0, 0};
-        int cur = ioctl(disp_fd, DISP_CMD_LCD_GET_BRIGHTNESS, args);
-        if (cur > 0 && cur <= 255) {
-            current_brightness = cur;
-            saved_brightness = cur;
-        } else {
-            /* Sett en behagelig standard (130/255 ~ 50%) */
-            power_set_brightness(130);
-        }
+        /* Forsikre at LCD-panelet er slatt paa */
+        unsigned long on_args[4] = {0, 0, 0, 0};
+        ioctl(disp_fd, DISP_CMD_LCD_ON, on_args);
+
+        /* Sett en lys og klar standardstyrke */
+        current_brightness = 190;
+        saved_brightness = 190;
+        power_set_brightness(190);
     }
 
     /* Optimaliser Allwinner A13 CPU: Bytt fra strømslukende 'performance' til 'ondemand' */
@@ -57,7 +56,7 @@ int power_get_brightness(void) {
     if (disp_fd >= 0) {
         unsigned long args[4] = {0, 0, 0, 0};
         int cur = ioctl(disp_fd, DISP_CMD_LCD_GET_BRIGHTNESS, args);
-        if (cur >= 0 && cur <= 255) {
+        if (cur >= 50 && cur <= 255) {
             current_brightness = cur;
         }
     }
@@ -67,24 +66,28 @@ int power_get_brightness(void) {
 int power_get_brightness_pct(void) {
     int raw = power_get_brightness();
     int pct = (raw * 100 + 127) / 255;
-    if (pct < 5) pct = 5;
+    if (pct < 10) pct = 10;
     if (pct > 100) pct = 100;
     return pct;
 }
 
 void power_set_brightness(int raw_val) {
-    if (raw_val < 5) raw_val = 5;
+    /* Sikre mot at panelet blir beksvart: minimum 60 / 255 */
+    if (raw_val < 60) raw_val = 60;
     if (raw_val > 255) raw_val = 255;
     current_brightness = raw_val;
 
     if (disp_fd >= 0) {
+        unsigned long on_args[4] = {0, 0, 0, 0};
+        ioctl(disp_fd, DISP_CMD_LCD_ON, on_args);
+
         unsigned long args[4] = {0, (unsigned long)raw_val, 0, 0};
         ioctl(disp_fd, DISP_CMD_LCD_SET_BRIGHTNESS, args);
     }
 }
 
 void power_set_brightness_pct(int pct) {
-    if (pct < 5) pct = 5;
+    if (pct < 15) pct = 15;
     if (pct > 100) pct = 100;
     int raw = (pct * 255) / 100;
     power_set_brightness(raw);
@@ -114,8 +117,9 @@ bool power_is_dimmed(void) {
 bool power_notify_activity(void) {
     inactivity_accum_ms = 0;
     if (is_dimmed) {
-        /* Våkn opp fra dvale: Gjenopprett opprinnelig lysstyrke */
+        /* Våkn opp fra dvale: Gjenopprett full lysstyrke */
         is_dimmed = false;
+        if (saved_brightness < 120) saved_brightness = 190;
         power_set_brightness(saved_brightness);
         return true; /* Skjerm vekket */
     }
@@ -130,11 +134,15 @@ bool power_update(uint32_t delta_ms) {
     inactivity_accum_ms += delta_ms;
 
     if (!is_dimmed && (inactivity_accum_ms >= sleep_timeout_sec * 1000)) {
-        /* Gå i dvale / strømsparing: Dimm baklyset ned til minimum */
-        saved_brightness = current_brightness;
+        /* Gå i dvale: Dimm baklyset ned til et synlig, men strømsparende nivå (70/255) */
+        if (current_brightness > 100) {
+            saved_brightness = current_brightness;
+        } else {
+            saved_brightness = 190;
+        }
         is_dimmed = true;
         if (disp_fd >= 0) {
-            unsigned long args[4] = {0, 10, 0, 0}; /* 10/255 er ultralavt strømtrekk */
+            unsigned long args[4] = {0, 70, 0, 0};
             ioctl(disp_fd, DISP_CMD_LCD_SET_BRIGHTNESS, args);
         }
         return true;
