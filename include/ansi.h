@@ -24,9 +24,19 @@
 #define MAX_GRID_ROWS 50
 
 typedef enum {
-    ORIENTATION_LANDSCAPE = 0,
-    ORIENTATION_PORTRAIT  = 1
+    ORIENTATION_LANDSCAPE          = 0, /* 0 grader - Normal landskap (100x30) */
+    ORIENTATION_PORTRAIT           = 1, /* 90 grader med klokken - Portrett høyre (60x50) */
+    ORIENTATION_LANDSCAPE_INVERTED = 2, /* 180 grader - Landskap opp-ned (100x30) */
+    ORIENTATION_PORTRAIT_INVERTED  = 3  /* 270 grader med klokken - Portrett venstre (60x50) */
 } ScreenOrientation;
+
+static inline bool orientation_is_portrait(ScreenOrientation o) {
+    return (o == ORIENTATION_PORTRAIT || o == ORIENTATION_PORTRAIT_INVERTED);
+}
+
+static inline bool orientation_is_landscape(ScreenOrientation o) {
+    return (o == ORIENTATION_LANDSCAPE || o == ORIENTATION_LANDSCAPE_INVERTED);
+}
 
 /* De 16 klassiske ANSI-fargene */
 typedef enum {

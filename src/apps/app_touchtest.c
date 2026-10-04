@@ -34,7 +34,7 @@ static bool touchtest_update(uint32_t delta_ms) {
 static void touchtest_render(void) {
     display_clear(ANSI_BLACK);
     ScreenOrientation orient = display_get_orientation();
-    int w = (orient == ORIENTATION_LANDSCAPE) ? 100 : 60;
+    int w = orientation_is_landscape(orient) ? 100 : 60;
 
     /* Header */
     display_draw_box(0, 0, w, 3, "", ANSI_WHITE, ANSI_GREEN, ANSI_YELLOW);
@@ -59,16 +59,23 @@ static void touchtest_render(void) {
     /* Live akselerometer */
     int sx, sy, sz;
     sensor_get_values(&sx, &sy, &sz);
+    const char *orient_name = "LANDSKAP (0)";
+    switch (orient) {
+        case ORIENTATION_LANDSCAPE:          orient_name = "0' LND"; break;
+        case ORIENTATION_PORTRAIT:           orient_name = "90' PRT"; break;
+        case ORIENTATION_LANDSCAPE_INVERTED: orient_name = "180' LND"; break;
+        case ORIENTATION_PORTRAIT_INVERTED:  orient_name = "270' PRT"; break;
+    }
+
     char buf_gsensor[90];
-    snprintf(buf_gsensor, sizeof(buf_gsensor), "G-SENSOR: X=%+6d Y=%+6d Z=%+6d [%s] AUTO-ROT: %s (SWAP: %s)",
-             sx, sy, sz, sensor_is_flat() ? "FLAT" : "TILTET",
-             sensor_get_auto_rotate() ? "PAA" : "AV",
-             sensor_get_axis_swap() ? "JA" : "NEI");
+    snprintf(buf_gsensor, sizeof(buf_gsensor), "G: X=%+6d Y=%+6d Z=%+6d [%s] %s AUTO:%s",
+             sx, sy, sz, sensor_is_flat() ? "FLAT" : "TILT", orient_name,
+             sensor_get_auto_rotate() ? "ON" : "OFF");
     display_draw_string(4, 6, buf_gsensor, ANSI_LIGHT_MAGENTA, ANSI_BLACK);
 
     /* Tegneområde */
     int canvas_top = 9;
-    int canvas_bottom = (orient == ORIENTATION_LANDSCAPE) ? 25 : 40;
+    int canvas_bottom = orientation_is_landscape(orient) ? 25 : 40;
     display_draw_box(2, canvas_top, w - 4, canvas_bottom - canvas_top, "TEGNEFELT - DRA FINGEREN HER", ANSI_WHITE, ANSI_BLACK, ANSI_LIGHT_GREEN);
 
     for (int i = 0; i < point_count; i++) {
@@ -79,15 +86,15 @@ static void touchtest_render(void) {
     }
 
     /* Knapper nederst */
-    int btn_y = (orient == ORIENTATION_LANDSCAPE) ? 26 : 41;
-    display_draw_box(0, btn_y, w, (orient == ORIENTATION_LANDSCAPE) ? 4 : 8, "", ANSI_WHITE, ANSI_DARK_GRAY, ANSI_LIGHT_GRAY);
+    int btn_y = orientation_is_landscape(orient) ? 26 : 41;
+    display_draw_box(0, btn_y, w, orientation_is_landscape(orient) ? 4 : 8, "", ANSI_WHITE, ANSI_DARK_GRAY, ANSI_LIGHT_GRAY);
     
     char auto_btn[24];
     snprintf(auto_btn, sizeof(auto_btn), " [ AUTO-ROT: %s ] ", sensor_get_auto_rotate() ? "PAA" : "AV ");
     char swap_btn[24];
     snprintf(swap_btn, sizeof(swap_btn), " [ AKSE: %s ] ", sensor_get_axis_swap() ? "SWAP" : "NORM");
 
-    if (orient == ORIENTATION_LANDSCAPE) {
+    if (orientation_is_landscape(orient)) {
         display_draw_button(4,  btn_y + 1, 18, " [< HOVEDMENY] ", ANSI_WHITE, ANSI_RED, false);
         display_draw_button(24, btn_y + 1, 18, " [ TOM SKJERM ] ", ANSI_WHITE, ANSI_BROWN, false);
         display_draw_button(44, btn_y + 1, 18, " [ ROTER MAN. ] ", ANSI_WHITE, ANSI_BLUE, false);
@@ -113,13 +120,13 @@ static void touchtest_touch(const TouchEvent *t) {
     }
 
     ScreenOrientation orient = display_get_orientation();
-    int w = (orient == ORIENTATION_LANDSCAPE) ? 100 : 60;
-    int btn_y = (orient == ORIENTATION_LANDSCAPE) ? 26 : 41;
+    int w = orientation_is_landscape(orient) ? 100 : 60;
+    int btn_y = orientation_is_landscape(orient) ? 26 : 41;
 
     if (t->is_down) {
         /* Tegn på lerret */
         int canvas_top = 9;
-        int canvas_bottom = (orient == ORIENTATION_LANDSCAPE) ? 25 : 40;
+        int canvas_bottom = orientation_is_landscape(orient) ? 25 : 40;
         if (t->grid_col >= 3 && t->grid_col < w - 3 &&
             t->grid_row > canvas_top && t->grid_row < canvas_bottom - 1) {
             if (point_count < MAX_POINTS - 1) {
@@ -132,7 +139,7 @@ static void touchtest_touch(const TouchEvent *t) {
     } else if (t->just_up) {
         if (input_hit_box(t, w - 18, 1, 16, 1)) {
             os_switch_app(&app_launcher);
-        } else if (orient == ORIENTATION_LANDSCAPE) {
+        } else if (orientation_is_landscape(orient)) {
             if (input_hit_box(t, 4, btn_y + 1, 18, 1)) {
                 os_switch_app(&app_launcher);
             } else if (input_hit_box(t, 24, btn_y + 1, 18, 1)) {

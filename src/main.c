@@ -160,8 +160,14 @@ int main(int argc, char **argv) {
             ScreenOrientation cur_orient = display_get_orientation();
             ScreenOrientation new_orient = cur_orient;
             if (sensor_check_tilt(cur_orient, &new_orient, (uint32_t)elapsed_ms)) {
-                printf("[*] tabOS Sensor: Tilt oppdaget! Bytter orientering til %s\n",
-                       (new_orient == ORIENTATION_PORTRAIT) ? "PORTRETT" : "LANDSKAP");
+                const char *or_name = "LANDSKAP (0 deg)";
+                switch (new_orient) {
+                    case ORIENTATION_LANDSCAPE:          or_name = "LANDSKAP (0 deg)"; break;
+                    case ORIENTATION_PORTRAIT:           or_name = "PORTRETT HOYRE (90 deg)"; break;
+                    case ORIENTATION_LANDSCAPE_INVERTED: or_name = "LANDSKAP OPP-NED (180 deg)"; break;
+                    case ORIENTATION_PORTRAIT_INVERTED:  or_name = "PORTRETT VENSTRE (270 deg)"; break;
+                }
+                printf("[*] tabOS Sensor: Tilt oppdaget! Bytter orientering til %s\n", or_name);
                 os_set_orientation(new_orient);
                 dirty = true;
             }

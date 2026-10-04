@@ -116,7 +116,7 @@ static void colortest_render_portrait(void) {
 }
 
 static void colortest_render(void) {
-    if (display_get_orientation() == ORIENTATION_PORTRAIT) {
+    if (orientation_is_portrait(display_get_orientation())) {
         colortest_render_portrait();
     } else {
         colortest_render_landscape();
@@ -125,7 +125,7 @@ static void colortest_render(void) {
 
 static void colortest_touch(const TouchEvent *t) {
     if (t->just_up) {
-        if (display_get_orientation() == ORIENTATION_LANDSCAPE) {
+        if (orientation_is_landscape(display_get_orientation())) {
             if (input_hit_box(t, 82, 1, 16, 1) || input_hit_box(t, 4, 27, 20, 1)) {
                 os_switch_app(&app_launcher);
             } else if (input_hit_box(t, 28, 27, 20, 1)) {

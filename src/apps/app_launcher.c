@@ -113,7 +113,7 @@ static void launcher_render_portrait(void) {
 }
 
 static void launcher_render(void) {
-    if (display_get_orientation() == ORIENTATION_PORTRAIT) {
+    if (orientation_is_portrait(display_get_orientation())) {
         launcher_render_portrait();
     } else {
         launcher_render_landscape();
@@ -123,7 +123,7 @@ static void launcher_render(void) {
 static void launcher_touch(const TouchEvent *t) {
     ScreenOrientation orient = display_get_orientation();
 
-    if (orient == ORIENTATION_LANDSCAPE) {
+    if (orientation_is_landscape(orient)) {
         /* Landskap sjekk */
         if (t->is_down) {
             if (input_hit_box(t, 6, 14, 24, 1))  pressed_button_id = 1;

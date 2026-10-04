@@ -158,7 +158,7 @@ static void keyboard_render_landscape(void) {
 }
 
 static void keyboard_render(void) {
-    if (display_get_orientation() == ORIENTATION_PORTRAIT) {
+    if (orientation_is_portrait(display_get_orientation())) {
         keyboard_render_portrait();
     } else {
         keyboard_render_landscape();
@@ -169,13 +169,13 @@ static void keyboard_touch(const TouchEvent *t) {
     if (!t->just_up) return;
 
     ScreenOrientation orient = display_get_orientation();
-    int w = (orient == ORIENTATION_LANDSCAPE) ? 100 : 60;
+    int w = orientation_is_landscape(orient) ? 100 : 60;
     if (input_hit_box(t, w - 18, 1, 16, 1)) {
         os_switch_app(&app_launcher);
         return;
     }
 
-    if (orient == ORIENTATION_PORTRAIT) {
+    if (orientation_is_portrait(orient)) {
         int base_col = 5;
         int kw = 5;
         int kh = 3;

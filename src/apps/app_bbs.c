@@ -168,8 +168,8 @@ static void bbs_handle_csi(char cmd) {
     int p1 = 0, p2 = 0;
     sscanf(csi_params, "%d;%d", &p1, &p2);
 
-    int viewport_rows = (display_get_orientation() == ORIENTATION_PORTRAIT) ? 32 : 20;
-    int viewport_cols = (display_get_orientation() == ORIENTATION_PORTRAIT) ? 60 : 100;
+    int viewport_rows = orientation_is_portrait(display_get_orientation()) ? 32 : 20;
+    int viewport_cols = orientation_is_portrait(display_get_orientation()) ? 60 : 100;
 
     switch (cmd) {
         case 'm': { /* SGR Colors */
@@ -266,8 +266,8 @@ static void bbs_handle_csi(char cmd) {
 }
 
 static void bbs_term_putc(char c) {
-    int viewport_rows = (display_get_orientation() == ORIENTATION_PORTRAIT) ? 32 : 20;
-    int viewport_cols = (display_get_orientation() == ORIENTATION_PORTRAIT) ? 60 : 100;
+    int viewport_rows = orientation_is_portrait(display_get_orientation()) ? 32 : 20;
+    int viewport_cols = orientation_is_portrait(display_get_orientation()) ? 60 : 100;
 
     /* ANSI Parser */
     if (parse_state == PARSE_NORMAL) {
@@ -353,8 +353,8 @@ static void bbs_term_puts(const char *s) {
 
 /* Telnet IAC protokollbehandling */
 static void bbs_process_incoming_byte(uint8_t b) {
-    int viewport_rows = (display_get_orientation() == ORIENTATION_PORTRAIT) ? 32 : 20;
-    int viewport_cols = (display_get_orientation() == ORIENTATION_PORTRAIT) ? 60 : 100;
+    int viewport_rows = orientation_is_portrait(display_get_orientation()) ? 32 : 20;
+    int viewport_cols = orientation_is_portrait(display_get_orientation()) ? 60 : 100;
 
     if (telnet_state == TELNET_NORMAL) {
         if (b == 0xFF) {
@@ -811,7 +811,7 @@ static void bbs_render_landscape(void) {
 }
 
 static void bbs_render(void) {
-    if (display_get_orientation() == ORIENTATION_PORTRAIT) {
+    if (orientation_is_portrait(display_get_orientation())) {
         bbs_render_portrait();
     } else {
         bbs_render_landscape();
@@ -821,7 +821,7 @@ static void bbs_render(void) {
 static void bbs_touch(const TouchEvent *t) {
     ScreenOrientation orient = display_get_orientation();
 
-    if (orient == ORIENTATION_PORTRAIT) {
+    if (orientation_is_portrait(orient)) {
         if (t->is_down) {
             /* Header */
             if (input_hit_box(t, 24, 0, 16, 2)) { pressed_key_id = 98; return; }

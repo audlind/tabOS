@@ -17,7 +17,7 @@ void display_init(uint32_t *framebuffer, ScreenOrientation orientation) {
 
 void display_set_orientation(ScreenOrientation orientation) {
     cur_orientation = orientation;
-    if (orientation == ORIENTATION_PORTRAIT) {
+    if (orientation_is_portrait(orientation)) {
         cur_cols = GRID_PORTRAIT_COLS;
         cur_rows = GRID_PORTRAIT_ROWS;
     } else {
@@ -143,7 +143,7 @@ void display_render_frame(void) {
     if (!fb_target) return;
 
     if (cur_orientation == ORIENTATION_LANDSCAPE) {
-        /* Landskap: 100 kolonner x 30 rader -> 800 x 480 piksler */
+        /* Landskap: 0 grader (100x30 tegn -> 800x480 piksler) */
         for (int r = 0; r < cur_rows; r++) {
             for (int c = 0; c < cur_cols; c++) {
                 AnsiCell cell = grid[r][c];
@@ -165,9 +165,34 @@ void display_render_frame(void) {
                 }
             }
         }
-    } else {
-        /* Portrett: 60 kolonner x 50 rader -> Virtuelt 480 x 800 piksler */
-        /* Roter 90 grader med klokken til fysisk 800 x 480 */
+    } else if (cur_orientation == ORIENTATION_LANDSCAPE_INVERTED) {
+        /* Landskap: 180 grader opp-ned (100x30 tegn -> 800x480 piksler) */
+        for (int r = 0; r < cur_rows; r++) {
+            for (int c = 0; c < cur_cols; c++) {
+                AnsiCell cell = grid[r][c];
+                uint32_t fg_color = ANSI_PALETTE_ARGB[cell.fg];
+                uint32_t bg_color = ANSI_PALETTE_ARGB[cell.bg];
+                const uint8_t *glyph_bitmap = font_cp437_8x16[cell.glyph];
+
+                int base_xv = c * FONT_W;
+                int base_yv = r * FONT_H;
+
+                for (int py = 0; py < FONT_H; py++) {
+                    uint8_t row_bits = glyph_bitmap[py];
+                    int yv = base_yv + py;
+                    int y_phys = (SCREEN_PHYS_HEIGHT - 1) - yv;
+
+                    for (int px = 0; px < FONT_W; px++) {
+                        int xv = base_xv + px;
+                        int x_phys = (SCREEN_PHYS_WIDTH - 1) - xv;
+                        uint32_t color = (row_bits & (0x80 >> px)) ? fg_color : bg_color;
+                        fb_target[y_phys * SCREEN_PHYS_WIDTH + x_phys] = color;
+                    }
+                }
+            }
+        }
+    } else if (cur_orientation == ORIENTATION_PORTRAIT) {
+        /* Portrett: 90 grader med klokken (60x50 tegn -> Virtuelt 480x800 piksler) */
         for (int r = 0; r < cur_rows; r++) {
             for (int c = 0; c < cur_cols; c++) {
                 AnsiCell cell = grid[r][c];
@@ -181,14 +206,37 @@ void display_render_frame(void) {
                 for (int py = 0; py < FONT_H; py++) {
                     uint8_t row_bits = glyph_bitmap[py];
                     int yv = base_yv + py; /* 0..799 */
-
-                    /* Rotasjonsformel: x_phys = 799 - yv, y_phys = xv */
-                    int x_phys = (SCREEN_PHYS_WIDTH - 1) - yv;
+                    int x_phys = (SCREEN_PHYS_WIDTH - 1) - yv; /* 799 - yv */
 
                     for (int px = 0; px < FONT_W; px++) {
                         int xv = base_xv + px; /* 0..479 */
                         int y_phys = xv;
+                        uint32_t color = (row_bits & (0x80 >> px)) ? fg_color : bg_color;
+                        fb_target[y_phys * SCREEN_PHYS_WIDTH + x_phys] = color;
+                    }
+                }
+            }
+        }
+    } else if (cur_orientation == ORIENTATION_PORTRAIT_INVERTED) {
+        /* Portrett: 270 grader med klokken / 90 grader mot klokken (60x50 tegn -> Virtuelt 480x800) */
+        for (int r = 0; r < cur_rows; r++) {
+            for (int c = 0; c < cur_cols; c++) {
+                AnsiCell cell = grid[r][c];
+                uint32_t fg_color = ANSI_PALETTE_ARGB[cell.fg];
+                uint32_t bg_color = ANSI_PALETTE_ARGB[cell.bg];
+                const uint8_t *glyph_bitmap = font_cp437_8x16[cell.glyph];
 
+                int base_xv = c * FONT_W;
+                int base_yv = r * FONT_H;
+
+                for (int py = 0; py < FONT_H; py++) {
+                    uint8_t row_bits = glyph_bitmap[py];
+                    int yv = base_yv + py; /* 0..799 */
+                    int x_phys = yv;       /* 0..799 */
+
+                    for (int px = 0; px < FONT_W; px++) {
+                        int xv = base_xv + px; /* 0..479 */
+                        int y_phys = (SCREEN_PHYS_HEIGHT - 1) - xv; /* 479 - xv */
                         uint32_t color = (row_bits & (0x80 >> px)) ? fg_color : bg_color;
                         fb_target[y_phys * SCREEN_PHYS_WIDTH + x_phys] = color;
                     }

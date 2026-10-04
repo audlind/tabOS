@@ -135,29 +135,42 @@ bool sensor_check_tilt(ScreenOrientation current_orient, ScreenOrientation *new_
         return false;
     }
 
-    /* Aksevurdering:
-       Når nettbrettet holdes i landskap, er kortkanten vertikal (tyngdekraft langs Y eller X).
-       Når nettbrettet roteres til portrett, blir langkanten vertikal. */
-    int mag_x = abs(filt_x);
-    int mag_y = abs(filt_y);
+    /* Aksevurdering med støtte for alle 4 retninger:
+       eff_x: Landskapsakse (0 grader ved +, 180 grader ved -)
+       eff_y: Portrettakse  (90 grader ved +, 270 grader ved -)
+    */
+    int eff_x = axis_swap ? filt_y : filt_x;
+    int eff_y = axis_swap ? filt_x : filt_y;
 
-    int val_landscape = axis_swap ? mag_y : mag_x;
-    int val_portrait  = axis_swap ? mag_x : mag_y;
+    int mag_x = abs(eff_x);
+    int mag_y = abs(eff_y);
 
     ScreenOrientation detected = current_orient;
 
-    /* Hysterese: Bytter kun hvis den andre aksen er markant større */
-    if (current_orient == ORIENTATION_LANDSCAPE) {
-        if (val_portrait > val_landscape + HYSTERESIS_THRESHOLD) {
+    /* Sjekk om portrett- eller landskapsaksen dominerer */
+    if (mag_y > mag_x + HYSTERESIS_THRESHOLD) {
+        /* Portrett dominerer: Skille mellom 90 grader og 270 grader */
+        detected = (eff_y > 0) ? ORIENTATION_PORTRAIT : ORIENTATION_PORTRAIT_INVERTED;
+    } else if (mag_x > mag_y + HYSTERESIS_THRESHOLD) {
+        /* Landskap dominerer: Skille mellom 0 grader (normal) og 180 grader (opp-ned) */
+        detected = (eff_x > 0) ? ORIENTATION_LANDSCAPE : ORIENTATION_LANDSCAPE_INVERTED;
+    } else if (orientation_is_portrait(current_orient)) {
+        /* Allerede i portrett: bytt kun til motsatt portrett hvis motsatt side er markant */
+        if (current_orient == ORIENTATION_PORTRAIT && eff_y < -HYSTERESIS_THRESHOLD) {
+            detected = ORIENTATION_PORTRAIT_INVERTED;
+        } else if (current_orient == ORIENTATION_PORTRAIT_INVERTED && eff_y > HYSTERESIS_THRESHOLD) {
             detected = ORIENTATION_PORTRAIT;
         }
-    } else {
-        if (val_landscape > val_portrait + HYSTERESIS_THRESHOLD) {
+    } else if (orientation_is_landscape(current_orient)) {
+        /* Allerede i landskap: bytt kun til motsatt landskap hvis motsatt side er markant */
+        if (current_orient == ORIENTATION_LANDSCAPE && eff_x < -HYSTERESIS_THRESHOLD) {
+            detected = ORIENTATION_LANDSCAPE_INVERTED;
+        } else if (current_orient == ORIENTATION_LANDSCAPE_INVERTED && eff_x > HYSTERESIS_THRESHOLD) {
             detected = ORIENTATION_LANDSCAPE;
         }
     }
 
-    /* Debouncing: Må holdes stabilt i DEBOUNCE_TIME_MS */
+    /* Debouncing: Må holdes stabilt i DEBOUNCE_TIME_MS før orientering byttes */
     if (detected != current_orient) {
         if (detected == candidate_orient) {
             stable_time_ms += delta_ms;

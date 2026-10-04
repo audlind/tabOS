@@ -109,7 +109,7 @@ static void reset_game(void) {
 
 static void snake_start(void) {
     /* Sikre at spillet kjører i portrettmodus */
-    if (display_get_orientation() != ORIENTATION_PORTRAIT) {
+    if (!orientation_is_portrait(display_get_orientation())) {
         display_set_orientation(ORIENTATION_PORTRAIT);
     }
     srand(time(NULL));

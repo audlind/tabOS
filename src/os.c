@@ -50,9 +50,10 @@ void os_set_orientation(ScreenOrientation new_orient) {
 }
 
 void os_toggle_orientation(void) {
-    ScreenOrientation new_orient = (display_get_orientation() == ORIENTATION_LANDSCAPE) 
-                                   ? ORIENTATION_PORTRAIT 
-                                   : ORIENTATION_LANDSCAPE;
+    ScreenOrientation cur = display_get_orientation();
+    ScreenOrientation new_orient = orientation_is_portrait(cur) 
+                                   ? ORIENTATION_LANDSCAPE 
+                                   : ORIENTATION_PORTRAIT;
     os_set_orientation(new_orient);
 }
 
