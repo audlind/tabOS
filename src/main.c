@@ -60,6 +60,15 @@ int main(int argc, char **argv) {
 
     signal(SIGINT, sig_handler);
     signal(SIGTERM, sig_handler);
+    signal(SIGHUP, SIG_IGN);
+    signal(SIGPIPE, SIG_IGN);
+
+    /* Hold Allwinner A13 CPU våken ved frakobling av USB */
+    int wl = open("/sys/power/wake_lock", O_WRONLY);
+    if (wl >= 0) {
+        write(wl, "tabos", 5);
+        close(wl);
+    }
 
     /* 3. Initialiser tabOS kjernen og registrer alle apper */
     os_init(fb, ORIENTATION_LANDSCAPE);
